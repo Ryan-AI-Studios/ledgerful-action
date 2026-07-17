@@ -102,6 +102,23 @@ export function verifyChecksum(
   }
 }
 
+function resolveBinaryPath(cacheDir: string, executableName: string): string | null {
+  // The release archive may extract the binary at the root OR inside a
+  // top-level directory (e.g. ledgerful-x86_64-unknown-linux-gnu/ledgerful).
+  // Check root first, then one level down.
+  const rootPath = path.join(cacheDir, executableName);
+  if (fs.existsSync(rootPath)) return rootPath;
+
+  const entries = fs.readdirSync(cacheDir, { withFileTypes: true });
+  for (const entry of entries) {
+    if (entry.isDirectory()) {
+      const nestedPath = path.join(cacheDir, entry.name, executableName);
+      if (fs.existsSync(nestedPath)) return nestedPath;
+    }
+  }
+  return null;
+}
+
 async function downloadAndCache(
   version: string,
   checksum: string,
@@ -153,10 +170,10 @@ async function downloadAndCache(
     binaryDir = await tc.cacheDir(extractedDir, cacheName, cacheVersion);
   }
 
-  const binaryPath = path.join(binaryDir, info.executableName);
-  if (!fs.existsSync(binaryPath)) {
+  const binaryPath = resolveBinaryPath(binaryDir, info.executableName);
+  if (!binaryPath) {
     throw new Error(
-      `Ledgerful binary not found at expected path: ${binaryPath}`,
+      `Ledgerful binary not found at expected path: ${binaryDir} (looked for ${info.executableName} at root and one level down)`,
     );
   }
 

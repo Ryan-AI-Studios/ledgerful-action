@@ -138,4 +138,27 @@ describe("installLedgerful", () => {
       Object.defineProperty(process, "arch", { value: originalArch });
     }
   });
+
+  it("finds the binary inside a top-level subdirectory (real archive layout)", async () => {
+    const originalPlatform = process.platform;
+    const originalArch = process.arch;
+    Object.defineProperty(process, "platform", { value: "linux" });
+    Object.defineProperty(process, "arch", { value: "x64" });
+    try {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ledgerful-cache-nested-"));
+      const subDir = path.join(dir, "ledgerful-x86_64-unknown-linux-gnu");
+      fs.mkdirSync(subDir, { recursive: true });
+      const bin = path.join(subDir, "ledgerful");
+      fs.writeFileSync(bin, "#!/bin/sh\necho ok\n");
+
+      vi.spyOn(tc, "find").mockReturnValue(dir);
+
+      const result = await installLedgerful("v0.1.8", knownLinuxChecksum, undefined);
+      expect(result).toBe(bin);
+      expect(fs.existsSync(result)).toBe(true);
+    } finally {
+      Object.defineProperty(process, "platform", { value: originalPlatform });
+      Object.defineProperty(process, "arch", { value: originalArch });
+    }
+  });
 });

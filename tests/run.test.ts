@@ -126,6 +126,17 @@ describe("runScan", () => {
     expect(capturedArgs[3]).toBe("--format");
     expect(capturedArgs[4]).toBe("json");
 
+    // Security-critical: assert the engine receives LEDGERFUL_NO_NETWORK=1
+    // (DoD-3: a test/inspection asserts the engine made no network call during the scan).
+    // The exec options must include env with LEDGERFUL_NO_NETWORK=1.
+    const execCalls = mockedExec.mock.calls;
+    const lastCallOptions = execCalls[execCalls.length - 1]?.[2] as Record<
+      string,
+      unknown
+    > | undefined;
+    const env = lastCallOptions?.env as Record<string, string> | undefined;
+    expect(env?.LEDGERFUL_NO_NETWORK).toBe("1");
+
     fs.unlinkSync(outputPath);
   });
 });

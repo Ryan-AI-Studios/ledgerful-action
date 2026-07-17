@@ -52,15 +52,9 @@ jobs:
         with:
           fetch-depth: 0   # REQUIRED — default 1 omits the base commit; scan --pr can't compute the diff
 
-      - name: Cache Ledgerful binary (optional, cross-run persistence)
-        # actions/cache@v4 — pin to a specific SHA in production.
-        uses: actions/cache@<pinned-sha>
-        with:
-          path: ~/.ledgerful
-          key: ledgerful-v0.1.8-<sha256-of-the-pinned-release-binary-for-this-runner-os-arch>-${{ runner.os }}-${{ runner.arch }}
-          restore-keys: |
-            ledgerful-v0.1.8-<sha256-of-the-pinned-release-binary-for-this-runner-os-arch>-
-
+      # Optional: add an actions/cache step keyed on <version>:<checksum> for cross-run
+      # binary persistence on ephemeral hosted runners (tool-cache already provides
+      # runner-local persistence via RUNNER_TOOL_CACHE; see "Optional cross-run binary cache" below).
       - name: Run Ledgerful PR risk scan
         uses: Ryan-AI-Studios/ledgerful-action@<pinned-sha>
         with:
@@ -148,7 +142,18 @@ recent release SHA for the corresponding `@v4` tag.
 ### Optional cross-run binary cache
 
 For ephemeral hosted runners, add an `actions/cache` step before the scan step, keyed on the pinned
-version + checksum. The Workflow A snippet already includes this step.
+version + checksum. `@actions/tool-cache` already provides runner-local persistence via
+`RUNNER_TOOL_CACHE` (sufficient for self-hosted runners); `actions/cache` is only needed when
+runners are ephemeral AND you want to avoid re-downloading across runs. The cache path must target
+the tool-cache directory for the pinned version, e.g.:
+
+```yaml
+      - name: Cache Ledgerful binary (optional, cross-run persistence)
+        uses: actions/cache@<pinned-sha>
+        with:
+          path: ${{ runner.tool_cache }}/ledgerful/<version>/<arch>
+          key: ledgerful-<version>-<checksum>-${{ runner.os }}-${{ runner.arch }}
+```
 
 ## Why `fetch-depth: 0` is required
 

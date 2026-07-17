@@ -1,10 +1,10 @@
 # Dependencies
 node_modules/
 
-# Build output
-dist/
-*.tsbuildinfo
+# Build output (dist/ IS committed for JS Action releases — GitHub runs dist/index.js
+# directly from the pinned SHA with no build step; see action.yml runs.main)
 build/
+*.tsbuildinfo
 
 # Logs
 *.log

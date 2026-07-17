@@ -12,16 +12,17 @@ jobs:
   lint-build-test:
     runs-on: ubuntu-latest
     steps:
-      # actions/checkout@v4 — pin to a specific SHA in production.
-      - uses: actions/checkout@<pinned-sha>
-      # actions/setup-node@v4 — pin to a specific SHA in production.
-      - uses: actions/setup-node@<pinned-sha>
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "24"
           cache: "npm"
       - run: npm ci
       - run: npm run lint
       - run: npm run build
+      - name: Verify dist is fresh
+        run: |
+          git diff --exit-code -- dist/ || (echo "dist/index.js is stale — run 'npm run build' and commit the result" && exit 1)
       - run: npm test
 
   smoke-scan:
@@ -30,22 +31,20 @@ jobs:
     permissions:
       contents: read
     steps:
-      # actions/checkout@v4 — pin to a specific SHA in production.
-      - uses: actions/checkout@<pinned-sha>
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 0
-      # actions/setup-node@v4 — pin to a specific SHA in production.
-      - uses: actions/setup-node@<pinned-sha>
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "24"
           cache: "npm"
       - run: npm ci
-      # This job requires a repository variable LEDGERFUL_LINUX_CHECKSUM containing the SHA-256 of
-      # the pinned v0.1.8 Linux x86_64 release binary. Set it in the repo's Settings > Variables.
+      # The checksum below is for ledgerful-x86_64-unknown-linux-gnu.tar.gz from v0.1.8.
+      # Override via vars.LEDGERFUL_LINUX_CHECKSUM for a different pinned version.
       - name: Run Ledgerful PR scan (smoke)
         uses: ./
         with:
           ledgerful-version: v0.1.8
-          ledgerful-checksum: ${{ vars.LEDGERFUL_LINUX_CHECKSUM }}
+          ledgerful-checksum: ${{ vars.LEDGERFUL_LINUX_CHECKSUM || '0ecba8040149f351448362bad3ea3ec940a59cf9fc719b90b7d6f2ac2649341a' }}
         env:
           LEDGERFUL_NO_NETWORK: "1"

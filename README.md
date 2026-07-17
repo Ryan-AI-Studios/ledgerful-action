@@ -1,6 +1,6 @@
 # Ledgerful PR Risk Report (GitHub Action)
 
-Runs the **real Ledgerful engine binary** inside your CI runner over a PR diff and posts a signed
+Runs the **real Ledgerful engine binary** inside your CI runner over a PR diff and posts a
 change-risk summary as a PR comment / check-run. One-line install in any workflow. No hosted
 service. Your code and token never leave your runner.
 
@@ -47,8 +47,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout PR (full history required for diff)
-        # actions/checkout@v4 — pin to a specific SHA in production.
-        uses: actions/checkout@<pinned-sha>
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 0   # REQUIRED — default 1 omits the base commit; scan --pr can't compute the diff
 
@@ -56,16 +55,16 @@ jobs:
       # binary persistence on ephemeral hosted runners (tool-cache already provides
       # runner-local persistence via RUNNER_TOOL_CACHE; see "Optional cross-run binary cache" below).
       - name: Run Ledgerful PR risk scan
-        uses: Ryan-AI-Studios/ledgerful-action@<pinned-sha>
+        uses: Ryan-AI-Studios/ledgerful-action@<pin-to-release-commit-sha>
         with:
           ledgerful-version: v0.1.8
-          ledgerful-checksum: <sha256-of-the-pinned-release-binary-for-this-runner-os-arch>
+          # checksum for ledgerful-x86_64-unknown-linux-gnu.tar.gz (v0.1.8); substitute for other OS/arch
+          ledgerful-checksum: 0ecba8040149f351448362bad3ea3ec940a59cf9fc719b90b7d6f2ac2649341a
         env:
           LEDGERFUL_NO_NETWORK: "1"   # assert the engine made no network call during the scan
 
       - name: Upload JSON report
-        # actions/upload-artifact@v4 — pin to a specific SHA in production.
-        uses: actions/upload-artifact@<pinned-sha>
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ledgerful-pr-report
           path: ledgerful-pr-report.json
@@ -92,22 +91,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Download the PR scan artifact
-        # actions/download-artifact@v4 — pin to a specific SHA in production.
-        uses: actions/download-artifact@<pinned-sha>
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: ledgerful-pr-report
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ github.token }}
 
       - name: Post risk summary
-        uses: Ryan-AI-Studios/ledgerful-action@<pinned-sha>
+        uses: Ryan-AI-Studios/ledgerful-action@<pin-to-release-commit-sha>
         with:
           github-token: ${{ github.token }}
           report-path: ledgerful-pr-report.json
 ```
 
-All first-party Actions in the snippets should be pinned by SHA. Replace `\u003cpinned-sha\u003e` with a
-recent release SHA for the corresponding `@v4` tag.
+> **Pinning notes:** first-party Actions (`actions/checkout`, `actions/upload-artifact`,
+> `actions/download-artifact`) are SHA-pinned to the versions shown. Replace
+> `<pin-to-release-commit-sha>` with the commit SHA of the `ledgerful-action` release you want to
+> use (pin by SHA, not by tag — supply-chain hygiene).
 
 > Workflow B runs in the **base-repo context** with a write token and **never executes PR code.**
 > Workflow A is read-only and receives no secrets. Fork PRs get no secrets and no write token.

@@ -12,10 +12,19 @@ function isWorkflowB(): boolean {
 }
 
 function getArtifactUrlFromWorkflowRun(): string | undefined {
-  const runId = process.env.GITHUB_RUN_ID;
-  const repo = process.env.GITHUB_REPOSITORY;
-  if (!runId || !repo) return undefined;
-  return `https://github.com/${repo}/actions/runs/${runId}`;
+  // In a workflow_run event, GITHUB_EVENT_PATH points to the event payload JSON.
+  // The payload contains `workflow_run.html_url` — the URL of Workflow A's run
+  // (where the artifact was uploaded), NOT Workflow B's own run.
+  const eventPath = process.env.GITHUB_EVENT_PATH;
+  if (!eventPath) return undefined;
+  try {
+    const event = JSON.parse(fs.readFileSync(eventPath, "utf8")) as {
+      workflow_run?: { html_url?: string };
+    };
+    return event.workflow_run?.html_url;
+  } catch {
+    return undefined;
+  }
 }
 
 async function runWorkflowA(): Promise<void> {
@@ -120,4 +129,4 @@ run().catch((err: unknown) => {
   }
 });
 
-export { run };
+export { run, getArtifactUrlFromWorkflowRun };

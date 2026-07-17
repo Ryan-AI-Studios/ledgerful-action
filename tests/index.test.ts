@@ -136,3 +136,47 @@ describe("resolveReportPath", () => {
     fs.rmSync(workspace, { recursive: true, force: true });
   });
 });
+
+describe("getArtifactUrlFromWorkflowRun", () => {
+  beforeEach(() => {
+    delete process.env.GITHUB_EVENT_PATH;
+  });
+
+  it("returns the workflow_run html_url from the event payload", async () => {
+    const tmpEvent = path.join(os.tmpdir(), `ledgerful-event-${Date.now()}.json`);
+    fs.writeFileSync(
+      tmpEvent,
+      JSON.stringify({
+        workflow_run: {
+          html_url: "https://github.com/Ryan-AI-Studios/Ledgerful/actions/runs/12345",
+        },
+      }),
+      "utf8",
+    );
+    process.env.GITHUB_EVENT_PATH = tmpEvent;
+
+    const mod = await import("../src/index.js");
+    const url = (mod as unknown as { getArtifactUrlFromWorkflowRun: () => string | undefined }).getArtifactUrlFromWorkflowRun();
+    expect(url).toBe("https://github.com/Ryan-AI-Studios/Ledgerful/actions/runs/12345");
+
+    fs.rmSync(tmpEvent, { force: true });
+  });
+
+  it("returns undefined when GITHUB_EVENT_PATH is absent", async () => {
+    const mod = await import("../src/index.js");
+    const url = (mod as unknown as { getArtifactUrlFromWorkflowRun: () => string | undefined }).getArtifactUrlFromWorkflowRun();
+    expect(url).toBeUndefined();
+  });
+
+  it("returns undefined when the event payload is malformed", async () => {
+    const tmpEvent = path.join(os.tmpdir(), `ledgerful-event-${Date.now()}.json`);
+    fs.writeFileSync(tmpEvent, "{ not valid json", "utf8");
+    process.env.GITHUB_EVENT_PATH = tmpEvent;
+
+    const mod = await import("../src/index.js");
+    const url = (mod as unknown as { getArtifactUrlFromWorkflowRun: () => string | undefined }).getArtifactUrlFromWorkflowRun();
+    expect(url).toBeUndefined();
+
+    fs.rmSync(tmpEvent, { force: true });
+  });
+});

@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import * as core from "@actions/core";
 import * as github from "@actions/github";
 import type { PrScanReport } from "./schema.js";
+import { escapeHtml } from "./escape.js";
 import {
   COMMENT_ANCHOR,
   renderCheckRunSummary,
@@ -164,7 +165,7 @@ async function upsertCheckRun(
 
   const summary = renderCheckRunSummary(report);
   const text = fs.existsSync(reportPath)
-    ? `<details><summary>Raw PR scan report</summary>\n\n\`\`\`json\n${fs.readFileSync(reportPath, "utf8")}\n\`\`\`\n</details>`
+    ? `<details><summary>Raw PR scan report</summary>\n\n\`\`\`json\n${escapeHtml(fs.readFileSync(reportPath, "utf8"))}\n\`\`\`\n</details>`
     : "Raw report not available.";
 
   const params = {

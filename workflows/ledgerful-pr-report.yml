@@ -22,7 +22,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Download the PR scan artifact
-        uses: actions/download-artifact@v4
+        # actions/download-artifact@v4 — pin to a specific SHA in production.
+        uses: actions/download-artifact@<pinned-sha>
         with:
           name: ledgerful-pr-report
           run-id: ${{ github.event.workflow_run.id }}
@@ -31,5 +32,5 @@ jobs:
       - name: Post risk summary
         uses: Ryan-AI-Studios/ledgerful-action@<pinned-sha>
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ github.token }}
           report-path: ledgerful-pr-report.json

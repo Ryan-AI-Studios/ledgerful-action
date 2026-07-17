@@ -54,8 +54,21 @@ export function getAssetInfo(): AssetInfo {
   };
 }
 
-export function getReleaseAssetUrl(version: string, assetName: string): string {
+const VERSION_TAG_RE = /^v\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)?$/;
+
+export function validateVersionTag(version: string): string {
   const tag = version.startsWith("v") ? version : `v${version}`;
+  if (!VERSION_TAG_RE.test(tag)) {
+    throw new Error(
+      `Invalid ledgerful-version "${version}". ` +
+        `Expected a SemVer release tag like v0.1.8 or v0.1.8-beta.1.`,
+    );
+  }
+  return tag;
+}
+
+export function getReleaseAssetUrl(version: string, assetName: string): string {
+  const tag = validateVersionTag(version);
   return `https://github.com/Ryan-AI-Studios/Ledgerful/releases/download/${tag}/${assetName}`;
 }
 
@@ -63,12 +76,13 @@ export async function downloadAuthenticated(
   url: string,
   token: string | undefined,
 ): Promise<string> {
-  const headers: Record<string, string> = {};
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
-    headers.Accept = "application/octet-stream";
+  if (!token) {
+    return tc.downloadTool(url);
   }
-  return tc.downloadTool(url, undefined, token ? JSON.stringify(headers) : undefined);
+  return tc.downloadTool(url, undefined, undefined, {
+    Authorization: `Bearer ${token}`,
+    Accept: "application/octet-stream",
+  });
 }
 
 export function verifyChecksum(

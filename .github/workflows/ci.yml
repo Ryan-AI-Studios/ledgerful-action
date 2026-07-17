@@ -12,8 +12,10 @@ jobs:
   lint-build-test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      # actions/checkout@v4 — pin to a specific SHA in production.
+      - uses: actions/checkout@<pinned-sha>
+      # actions/setup-node@v4 — pin to a specific SHA in production.
+      - uses: actions/setup-node@<pinned-sha>
         with:
           node-version: "24"
           cache: "npm"
@@ -28,14 +30,18 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      # actions/checkout@v4 — pin to a specific SHA in production.
+      - uses: actions/checkout@<pinned-sha>
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+      # actions/setup-node@v4 — pin to a specific SHA in production.
+      - uses: actions/setup-node@<pinned-sha>
         with:
           node-version: "24"
           cache: "npm"
       - run: npm ci
+      # This job requires a repository variable LEDGERFUL_LINUX_CHECKSUM containing the SHA-256 of
+      # the pinned v0.1.8 Linux x86_64 release binary. Set it in the repo's Settings > Variables.
       - name: Run Ledgerful PR scan (smoke)
         uses: ./
         with:

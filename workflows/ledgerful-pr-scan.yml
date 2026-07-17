@@ -21,9 +21,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout PR (full history required for diff)
-        uses: actions/checkout@v4
+        # actions/checkout@v4 — pin to a specific SHA in production.
+        uses: actions/checkout@<pinned-sha>
         with:
           fetch-depth: 0
+
+      - name: Cache Ledgerful binary (optional, cross-run persistence)
+        # actions/cache@v4 — pin to a specific SHA in production.
+        uses: actions/cache@<pinned-sha>
+        with:
+          path: ~/.ledgerful
+          key: ledgerful-v0.1.8-<sha256-of-the-pinned-release-binary-for-this-runner-os-arch>-${{ runner.os }}-${{ runner.arch }}
+          restore-keys: |
+            ledgerful-v0.1.8-<sha256-of-the-pinned-release-binary-for-this-runner-os-arch>-
 
       - name: Run Ledgerful PR risk scan
         id: ledgerful-scan
@@ -35,7 +45,8 @@ jobs:
           LEDGERFUL_NO_NETWORK: "1"
 
       - name: Upload JSON report
-        uses: actions/upload-artifact@v4
+        # actions/upload-artifact@v4 — pin to a specific SHA in production.
+        uses: actions/upload-artifact@<pinned-sha>
         with:
           name: ledgerful-pr-report
           path: ledgerful-pr-report.json

@@ -1,4 +1,5 @@
 import * as fs from "node:fs";
+import * as path from "node:path";
 import * as core from "@actions/core";
 import { installLedgerful } from "./download.js";
 import { postSummary } from "./post.js";
@@ -61,12 +62,32 @@ function shouldFail(riskLevel: string, failOn: string): boolean {
   return failIndex !== -1 && riskIndex >= failIndex;
 }
 
-async function runWorkflowB(): Promise<void> {
-  const token = core.getInput("github-token", { required: true });
-  const reportPath =
+function resolveReportPath(): string {
+  const raw =
     core.getInput("report-path") ||
     process.env.LEDGERFUL_REPORT_PATH ||
     "ledgerful-pr-report.json";
+  const workspace = process.env.GITHUB_WORKSPACE ?? process.cwd();
+  const absolute = path.isAbsolute(raw) ? raw : path.resolve(workspace, raw);
+  const relativeToWorkspace = path.relative(workspace, absolute);
+
+  if (
+    path.isAbsolute(raw) ||
+    raw.startsWith("..") ||
+    relativeToWorkspace.startsWith("..") ||
+    relativeToWorkspace.includes("..")
+  ) {
+    throw new Error(
+      `Invalid report-path "${raw}". ` +
+        `The path must be relative and stay within GITHUB_WORKSPACE (${workspace}).`,
+    );
+  }
+  return absolute;
+}
+
+async function runWorkflowB(): Promise<void> {
+  const token = core.getInput("github-token", { required: true });
+  const reportPath = resolveReportPath();
 
   const raw = fs.readFileSync(reportPath, "utf8");
   const report: PrScanReport = JSON.parse(raw) as PrScanReport;

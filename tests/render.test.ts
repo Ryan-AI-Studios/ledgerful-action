@@ -38,7 +38,10 @@ describe("renderSummary", () => {
     expect(body).not.toContain("${IFS}");
     expect(body).not.toContain("`rm -rf /`");
     expect(body).not.toContain("src/<!-- ledgerful-action:pr-comment -->");
-
+    expect(body).not.toContain("<!--inject-->");
+    expect(body).not.toContain("</script>");
+    expect(body).not.toContain("<img src=x onerror=alert(1)>");
+    expect(body).not.toContain("abc123;rm -rf /");
   });
 
   it("truncates long file lists", () => {
@@ -70,6 +73,10 @@ describe("renderCheckRunSummary", () => {
   it("escapes adversarial content", () => {
     const text = renderCheckRunSummary(adversarialReport);
     expect(text).not.toContain("<script>");
+    expect(text).not.toContain("<!--inject-->");
+    expect(text).not.toContain("</script>");
+    expect(text).not.toContain("<img src=x onerror=alert(1)>");
+    expect(text).not.toContain("abc123;rm -rf /");
   });
 });
 

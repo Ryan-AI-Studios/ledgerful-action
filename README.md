@@ -9,6 +9,11 @@ service. Your code and token never leave your runner.
 > posts a summary via `GITHUB_TOKEN`. The engine has no network code — the network call lives in
 > this Action wrapper, never in the binary. That is why the surface can be "the same engine you
 > run locally."
+>
+> **Workflow A token note:** Workflow A may receive a read-only `GITHUB_TOKEN` (the default
+> `${{ github.token }}`) solely to authenticate the release download and benefit from the higher
+> authenticated rate limit. The workflow's `permissions: contents: read` block removes write access.
+> Workflow A never receives repo secrets.
 
 ## Fork-PR safety: the two-workflow pattern (MANDATED)
 
@@ -42,9 +47,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout PR (full history required for diff)
-        uses: actions/checkout@v4
+        # actions/checkout@v4 — pin to a specific SHA in production.
+        uses: actions/checkout@<pinned-sha>
         with:
           fetch-depth: 0   # REQUIRED — default 1 omits the base commit; scan --pr can't compute the diff
+
+      - name: Cache Ledgerful binary (optional, cross-run persistence)
+        # actions/cache@v4 — pin to a specific SHA in production.
+        uses: actions/cache@<pinned-sha>
+        with:
+          path: ~/.ledgerful
+          key: ledgerful-v0.1.8-<sha256-of-the-pinned-release-binary-for-this-runner-os-arch>-${{ runner.os }}-${{ runner.arch }}
+          restore-keys: |
+            ledgerful-v0.1.8-<sha256-of-the-pinned-release-binary-for-this-runner-os-arch>-
 
       - name: Run Ledgerful PR risk scan
         uses: Ryan-AI-Studios/ledgerful-action@<pinned-sha>
@@ -55,7 +70,8 @@ jobs:
           LEDGERFUL_NO_NETWORK: "1"   # assert the engine made no network call during the scan
 
       - name: Upload JSON report
-        uses: actions/upload-artifact@v4
+        # actions/upload-artifact@v4 — pin to a specific SHA in production.
+        uses: actions/upload-artifact@<pinned-sha>
         with:
           name: ledgerful-pr-report
           path: ledgerful-pr-report.json
@@ -82,7 +98,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Download the PR scan artifact
-        uses: actions/download-artifact@v4
+        # actions/download-artifact@v4 — pin to a specific SHA in production.
+        uses: actions/download-artifact@<pinned-sha>
         with:
           name: ledgerful-pr-report
           run-id: ${{ github.event.workflow_run.id }}
@@ -91,8 +108,12 @@ jobs:
       - name: Post risk summary
         uses: Ryan-AI-Studios/ledgerful-action@<pinned-sha>
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ github.token }}
+          report-path: ledgerful-pr-report.json
 ```
+
+All first-party Actions in the snippets should be pinned by SHA. Replace `\u003cpinned-sha\u003e` with a
+recent release SHA for the corresponding `@v4` tag.
 
 > Workflow B runs in the **base-repo context** with a write token and **never executes PR code.**
 > Workflow A is read-only and receives no secrets. Fork PRs get no secrets and no write token.
@@ -102,8 +123,8 @@ jobs:
 | input | required | default | description |
 | --- | --- | --- | --- |
 | `ledgerful-version` | no | `v0.1.8` | pinned engine release version |
-| `ledgerful-checksum` | yes* | — | SHA-256 of the release binary for the runner OS/arch; required in Workflow A |
-| `github-token` | no | `${{ github.token }}` | token used to post the comment / check-run (Workflow B only) |
+| `ledgerful-checksum` | yes | — | SHA-256 of the release binary for the runner OS/arch; required in Workflow A |
+| `github-token` | no | `${{ github.token }}` | token used to authenticate the release download in Workflow A and to post the comment / check-run in Workflow B |
 | `fail-on` | no | — | optional `low`/`medium`/`high` threshold that fails the build non-blockingly |
 
 ## Action outputs
@@ -118,10 +139,16 @@ jobs:
 - **Pin a specific Ledgerful release by version + checksum.** Never `latest` — supply-chain hygiene
   consistent with SHA-pinned Actions. The checksum is verified before exec **even on a cache hit**.
 - **Binary caching:** the wrapper uses `@actions/tool-cache` (`find` → reuse; else `downloadTool` →
-  `cacheDir`) to reuse the pinned binary, authenticates the download with `GITHUB_TOKEN` for the
-  higher authenticated rate limit, and pairs with `actions/cache` keyed on the pinned version +
-  checksum for cross-run persistence on ephemeral runners.
+  `cacheDir`) to reuse the pinned binary and authenticates the download with `GITHUB_TOKEN` for the
+  higher authenticated rate limit. `tool-cache` provides runner-local persistence; for cross-run
+  persistence on ephemeral hosted runners, users can add an `actions/cache` step keyed on the pinned
+  version + checksum — see the example in the Workflow A snippet below.
 - **Pin this Action itself** by commit SHA (`@<pinned-sha>`), not by tag.
+
+### Optional cross-run binary cache
+
+For ephemeral hosted runners, add an `actions/cache` step before the scan step, keyed on the pinned
+version + checksum. The Workflow A snippet already includes this step.
 
 ## Why `fetch-depth: 0` is required
 

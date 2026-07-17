@@ -50,6 +50,34 @@ describe("getReleaseAssetUrl", () => {
       "https://github.com/Ryan-AI-Studios/Ledgerful/releases/download/v0.1.8/foo.tar.gz",
     );
   });
+
+  it("rejects malformed versions", () => {
+    const bads = [
+      "../v0.1.8",
+      "v0.1.8?x=y",
+      "latest",
+      "",
+      "v1.2",
+      "v1.2.3-rc!bad",
+    ];
+    for (const bad of bads) {
+      expect(() => getReleaseAssetUrl(bad, "foo.tar.gz")).toThrow(
+        /Invalid ledgerful-version/,
+      );
+    }
+  });
+
+  it("accepts a leading v if omitted", () => {
+    expect(getReleaseAssetUrl("0.1.8", "foo.tar.gz")).toBe(
+      "https://github.com/Ryan-AI-Studios/Ledgerful/releases/download/v0.1.8/foo.tar.gz",
+    );
+  });
+
+  it("accepts pre-release tags", () => {
+    expect(getReleaseAssetUrl("v0.1.8-beta.1", "foo.tar.gz")).toBe(
+      "https://github.com/Ryan-AI-Studios/Ledgerful/releases/download/v0.1.8-beta.1/foo.tar.gz",
+    );
+  });
 });
 
 describe("verifyChecksum", () => {

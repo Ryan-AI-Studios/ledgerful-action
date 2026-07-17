@@ -1,0 +1,26 @@
+name: Ledgerful PR Risk Report
+description: Runs the real Ledgerful engine binary in your runner over a PR diff and posts a signed change-risk summary as a PR comment / check-run. Same engine you run locally — there is no Ledgerful server in the loop.
+author: Ledgerful, LLC
+branding:
+  icon: shield
+  color: blue
+
+inputs:
+  ledgerful-version:
+    description: Pinned Ledgerful engine release version to run (e.g. v0.1.8). Not `latest` — supply-chain hygiene.
+    required: true
+  ledgerful-checksum:
+    description: SHA-256 checksum of the pinned release binary for the runner's OS/arch. Verified before exec, even on cache hit.
+    required: true
+  github-token:
+    description: GITHUB_TOKEN used to post the PR comment / check-run. Workflow B uses a write scope; Workflow A is read-only and never receives this.
+    required: false
+    default: ${{ github.token }}
+  fail-on:
+    description: Optional non-blocking fail condition (e.g. high). Reporting only — policy enforcement is out of scope here.
+    required: false
+    default: ''
+
+runs:
+  using: node24
+  main: dist/index.js

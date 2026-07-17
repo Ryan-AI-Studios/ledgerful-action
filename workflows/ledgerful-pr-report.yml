@@ -1,0 +1,34 @@
+# Workflow B — Ledgerful PR Report
+# Runs in the BASE-REPO context (workflow_run on A's completion) with a write token.
+# Downloads A's artifact and posts the comment / check-run.
+# NEVER checks out or executes PR code — only consumes the sanitized JSON.
+#
+# Together with ledgerful-pr-scan.yml this is the fork-PR-safe two-workflow pattern.
+# `pull_request_target`-with-checkout is forbidden (RCE footgun).
+
+name: Ledgerful PR Report
+
+on:
+  workflow_run:
+    workflows: [Ledgerful PR Scan]
+    types: [completed]
+
+permissions:
+  pull-requests: write
+  checks: write
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download the PR scan artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ledgerful-pr-report
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      - name: Post risk summary
+        uses: Ryan-AI-Studios/ledgerful-action@<pinned-sha>
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}

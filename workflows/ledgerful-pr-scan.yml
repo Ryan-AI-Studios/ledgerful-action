@@ -1,0 +1,40 @@
+# Workflow A — Ledgerful PR Scan
+# Runs the real Ledgerful engine binary in the runner over the untrusted PR diff.
+# Read-only. No write token, no secrets. Uploads the JSON report as an artifact.
+#
+# Fork-PR safe: untrusted code only ever runs here, with nothing it can abuse.
+# Workflow B (ledgerful-pr-report.yml) consumes the artifact and posts the comment.
+#
+# IMPORTANT: actions/checkout MUST use fetch-depth: 0 (default 1 omits the base commit,
+# so `ledgerful scan --pr <base>...<head>` can't compute the diff).
+
+name: Ledgerful PR Scan
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR (full history required for diff)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Ledgerful PR risk scan
+        uses: Ryan-AI-Studios/ledgerful-action@<pinned-sha>
+        with:
+          ledgerful-version: v0.1.8
+          ledgerful-checksum: <sha256-of-the-pinned-release-binary-for-this-runner-os-arch>
+        env:
+          LEDGERFUL_NO_NETWORK: "1"
+
+      - name: Upload JSON report
+        uses: actions/upload-artifact@v4
+        with:
+          name: ledgerful-pr-report
+          path: ledgerful-pr-report.json

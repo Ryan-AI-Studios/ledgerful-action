@@ -39,7 +39,9 @@ async function runWorkflowA(): Promise<void> {
   const cwd = process.env.GITHUB_WORKSPACE ?? process.cwd();
 
   const reportPath =
-    process.env.LEDGERFUL_REPORT_PATH ?? "ledgerful-pr-report.json";
+    core.getInput("report-path") ||
+    process.env.LEDGERFUL_REPORT_PATH ||
+    "ledgerful-pr-report.json";
 
   const report = await runScan({
     binaryPath,

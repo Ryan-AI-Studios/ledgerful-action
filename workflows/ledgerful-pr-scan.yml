@@ -34,7 +34,7 @@ jobs:
       # runner-local persistence via RUNNER_TOOL_CACHE; see "Optional cross-run binary cache" in README).
       - name: Run Ledgerful PR risk scan
         id: ledgerful-scan
-        uses: Ryan-AI-Studios/ledgerful-action@<pin-to-release-commit-sha>
+        uses: Ryan-AI-Studios/ledgerful-action@v0.1.0 # pin to the commit SHA of a release for production
         with:
           ledgerful-version: v0.1.8
           ledgerful-checksum: 0ecba8040149f351448362bad3ea3ec940a59cf9fc719b90b7d6f2ac2649341a

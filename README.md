@@ -55,7 +55,7 @@ jobs:
       # binary persistence on ephemeral hosted runners (tool-cache already provides
       # runner-local persistence via RUNNER_TOOL_CACHE; see "Optional cross-run binary cache" below).
       - name: Run Ledgerful PR risk scan
-        uses: Ryan-AI-Studios/ledgerful-action@<pin-to-release-commit-sha>
+        uses: Ryan-AI-Studios/ledgerful-action@v0.1.0 # pin to the commit SHA of a release for production
         with:
           ledgerful-version: v0.1.8
           # checksum for ledgerful-x86_64-unknown-linux-gnu.tar.gz (v0.1.8); substitute for other OS/arch
@@ -98,16 +98,16 @@ jobs:
           github-token: ${{ github.token }}
 
       - name: Post risk summary
-        uses: Ryan-AI-Studios/ledgerful-action@<pin-to-release-commit-sha>
+        uses: Ryan-AI-Studios/ledgerful-action@v0.1.0 # pin to the commit SHA of a release for production
         with:
           github-token: ${{ github.token }}
           report-path: ledgerful-pr-report.json
 ```
 
 > **Pinning notes:** first-party Actions (`actions/checkout`, `actions/upload-artifact`,
-> `actions/download-artifact`) are SHA-pinned to the versions shown. Replace
-> `<pin-to-release-commit-sha>` with the commit SHA of the `ledgerful-action` release you want to
-> use (pin by SHA, not by tag — supply-chain hygiene).
+> `actions/download-artifact`) are SHA-pinned to the versions shown. Pin `ledgerful-action` to the
+> commit SHA of the release you want to use (the `@v0.1.0` tag is shown for readability — replace
+> it with `@<commit-sha>` for supply-chain hygiene).
 
 > Workflow B runs in the **base-repo context** with a write token and **never executes PR code.**
 > Workflow A is read-only and receives no secrets. Fork PRs get no secrets and no write token.

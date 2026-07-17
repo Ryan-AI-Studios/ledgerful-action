@@ -11,8 +11,8 @@ inputs:
     required: false
     default: 'v0.1.8'
   ledgerful-checksum:
-    description: SHA-256 checksum of the pinned release binary for the runner's OS/arch. Verified before exec, even on cache hit. Required in Workflow A (scan); harmless in Workflow B.
-    required: true
+    description: SHA-256 checksum of the pinned release binary for the runner's OS/arch. Verified before exec, even on cache hit. Required in Workflow A (scan); not used in Workflow B. Validated at runtime in Workflow A.
+    required: false
   github-token:
     description: GITHUB_TOKEN used to authenticate the release download in Workflow A and to post the PR comment / check-run in Workflow B. Workflow A should run with permissions contents read only; Workflow B uses pull-requests write + checks write.
     required: false

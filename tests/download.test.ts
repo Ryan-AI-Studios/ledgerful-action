@@ -99,7 +99,7 @@ describe("verifyChecksum", () => {
 });
 
 describe("installLedgerful", () => {
-  it("verifies even on cache hit", async () => {
+  it("uses a cached binary without re-verifying the executable (archive checksum was the gate)", async () => {
     const originalPlatform = process.platform;
     const originalArch = process.arch;
     Object.defineProperty(process, "platform", { value: "linux" });
@@ -107,13 +107,32 @@ describe("installLedgerful", () => {
     try {
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ledgerful-cache-"));
       const bin = path.join(dir, "ledgerful");
-      fs.writeFileSync(bin, "hello");
+      fs.writeFileSync(bin, "#!/bin/sh\necho ok\n");
+
+      vi.spyOn(tc, "find").mockReturnValue(dir);
+
+      const result = await installLedgerful("v0.1.8", knownLinuxChecksum, undefined);
+      expect(result).toBe(bin);
+      expect(fs.existsSync(result)).toBe(true);
+    } finally {
+      Object.defineProperty(process, "platform", { value: originalPlatform });
+      Object.defineProperty(process, "arch", { value: originalArch });
+    }
+  });
+
+  it("throws if the cached binary is missing", async () => {
+    const originalPlatform = process.platform;
+    const originalArch = process.arch;
+    Object.defineProperty(process, "platform", { value: "linux" });
+    Object.defineProperty(process, "arch", { value: "x64" });
+    try {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ledgerful-cache-empty-"));
 
       vi.spyOn(tc, "find").mockReturnValue(dir);
 
       await expect(
         installLedgerful("v0.1.8", knownLinuxChecksum, undefined),
-      ).rejects.toThrow(/Checksum mismatch/);
+      ).rejects.toThrow(/binary not found/);
     } finally {
       Object.defineProperty(process, "platform", { value: originalPlatform });
       Object.defineProperty(process, "arch", { value: originalArch });

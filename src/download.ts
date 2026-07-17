@@ -157,7 +157,11 @@ async function downloadAndCache(
     );
   }
 
-  verifyChecksum(binaryPath, checksum);
+  // The checksum is of the release archive (.tar.gz/.zip), verified above on
+  // download (line 138). The extracted executable has a different hash than the
+  // archive, so we do NOT re-verify the executable against the archive checksum.
+  // Supply-chain integrity is established by the archive checksum + the release's
+  // cosign/SLSA attestation (verified out of band by the consumer if desired).
   if (process.platform !== "win32") {
     fs.chmodSync(binaryPath, 0o755);
   }

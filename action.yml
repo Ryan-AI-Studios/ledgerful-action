@@ -1,5 +1,5 @@
 name: Ledgerful PR Risk Report
-description: Runs the real Ledgerful engine binary in your runner over a PR diff and posts a signed change-risk summary as a PR comment / check-run. Same engine you run locally — there is no Ledgerful server in the loop.
+description: Runs the real Ledgerful engine binary in your runner over a PR diff and posts a change-risk summary as a PR comment / check-run. Same engine you run locally — there is no Ledgerful server in the loop.
 author: Ledgerful, LLC
 branding:
   icon: shield
@@ -8,18 +8,29 @@ branding:
 inputs:
   ledgerful-version:
     description: Pinned Ledgerful engine release version to run (e.g. v0.1.8). Not `latest` — supply-chain hygiene.
-    required: true
+    required: false
+    default: 'v0.1.8'
   ledgerful-checksum:
-    description: SHA-256 checksum of the pinned release binary for the runner's OS/arch. Verified before exec, even on cache hit.
-    required: true
+    description: SHA-256 checksum of the pinned release ARCHIVE (.tar.gz/.zip) for the runner's OS/arch. Verified against the downloaded archive before extraction. Required in Workflow A (scan); not used in Workflow B. Validated at runtime in Workflow A.
+    required: false
   github-token:
-    description: GITHUB_TOKEN used to post the PR comment / check-run. Workflow B uses a write scope; Workflow A is read-only and never receives this.
+    description: GITHUB_TOKEN used to authenticate the release download in Workflow A and to post the PR comment / check-run in Workflow B. Workflow A should run with permissions contents read only; Workflow B uses pull-requests write + checks write.
     required: false
     default: ${{ github.token }}
+  report-path:
+    description: Path to the JSON report file. Workflow A writes it; Workflow B reads it (relative to GITHUB_WORKSPACE).
+    required: false
+    default: 'ledgerful-pr-report.json'
   fail-on:
-    description: Optional non-blocking fail condition (e.g. high). Reporting only — policy enforcement is out of scope here.
+    description: Optional non-blocking fail condition (low|medium|high). Reporting only — policy enforcement is out of scope here.
     required: false
     default: ''
+
+outputs:
+  report-path:
+    description: Path to the JSON report written by Workflow A.
+  risk-level:
+    description: Risk level reported by the scan (low, medium, high).
 
 runs:
   using: node24

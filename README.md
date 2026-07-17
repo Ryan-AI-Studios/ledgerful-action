@@ -1,6 +1,6 @@
 # Ledgerful PR Risk Report (GitHub Action)
 
-Runs the **real Ledgerful engine binary** inside your CI runner over a PR diff and posts a signed
+Runs the **real Ledgerful engine binary** inside your CI runner over a PR diff and posts a
 change-risk summary as a PR comment / check-run. One-line install in any workflow. No hosted
 service. Your code and token never leave your runner.
 
@@ -9,6 +9,11 @@ service. Your code and token never leave your runner.
 > posts a summary via `GITHUB_TOKEN`. The engine has no network code — the network call lives in
 > this Action wrapper, never in the binary. That is why the surface can be "the same engine you
 > run locally."
+>
+> **Workflow A token note:** Workflow A may receive a read-only `GITHUB_TOKEN` (the default
+> `${{ github.token }}`) solely to authenticate the release download and benefit from the higher
+> authenticated rate limit. The workflow's `permissions: contents: read` block removes write access.
+> Workflow A never receives repo secrets.
 
 ## Fork-PR safety: the two-workflow pattern (MANDATED)
 
@@ -42,20 +47,27 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout PR (full history required for diff)
-        uses: actions/checkout@v4
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 0   # REQUIRED — default 1 omits the base commit; scan --pr can't compute the diff
 
+      # Optional: add an actions/cache step keyed on <version>:<checksum> for cross-run
+      # binary persistence on ephemeral hosted runners (tool-cache already provides
+      # runner-local persistence via RUNNER_TOOL_CACHE; see "Optional cross-run binary cache" below).
       - name: Run Ledgerful PR risk scan
-        uses: Ryan-AI-Studios/ledgerful-action@<pinned-sha>
+        # Pin ledgerful-action to a specific commit SHA for supply-chain hygiene.
+        # @v0.1.0 is shown for readability; replace with @<commit-sha> in production
+        # (find the SHA at https://github.com/Ryan-AI-Studios/ledgerful-action/releases).
+        uses: Ryan-AI-Studios/ledgerful-action@v0.1.0
         with:
           ledgerful-version: v0.1.8
-          ledgerful-checksum: <sha256-of-the-pinned-release-binary-for-this-runner-os-arch>
+          # checksum for ledgerful-x86_64-unknown-linux-gnu.tar.gz (v0.1.8); substitute for other OS/arch
+          ledgerful-checksum: 0ecba8040149f351448362bad3ea3ec940a59cf9fc719b90b7d6f2ac2649341a
         env:
           LEDGERFUL_NO_NETWORK: "1"   # assert the engine made no network call during the scan
 
       - name: Upload JSON report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ledgerful-pr-report
           path: ledgerful-pr-report.json
@@ -82,30 +94,74 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Download the PR scan artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: ledgerful-pr-report
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ github.token }}
 
       - name: Post risk summary
-        uses: Ryan-AI-Studios/ledgerful-action@<pinned-sha>
+        # Pin ledgerful-action to a specific commit SHA for supply-chain hygiene.
+        # @v0.1.0 is shown for readability; replace with @<commit-sha> in production
+        # (find the SHA at https://github.com/Ryan-AI-Studios/ledgerful-action/releases).
+        uses: Ryan-AI-Studios/ledgerful-action@v0.1.0
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ github.token }}
+          report-path: ledgerful-pr-report.json
 ```
+
+> **Pinning notes:** first-party Actions (`actions/checkout`, `actions/upload-artifact`,
+> `actions/download-artifact`) are SHA-pinned to the versions shown. Pin `ledgerful-action` to the
+> commit SHA of the release you want to use (the `@v0.1.0` tag is shown for readability — replace
+> it with `@<commit-sha>` for supply-chain hygiene).
 
 > Workflow B runs in the **base-repo context** with a write token and **never executes PR code.**
 > Workflow A is read-only and receives no secrets. Fork PRs get no secrets and no write token.
 
+## Action inputs
+
+| input | required | default | description |
+| --- | --- | --- | --- |
+| `ledgerful-version` | no | `v0.1.8` | pinned engine release version |
+| `ledgerful-checksum` | yes | — | SHA-256 of the release archive (.tar.gz/.zip) for the runner OS/arch; required in Workflow A |
+| `github-token` | no | `${{ github.token }}` | token used to authenticate the release download in Workflow A and to post the comment / check-run in Workflow B |
+| `fail-on` | no | — | optional `low`/`medium`/`high` threshold that fails the build non-blockingly |
+
+## Action outputs
+
+| output | description |
+| --- | --- |
+| `report-path` | path to the JSON report written by Workflow A |
+| `risk-level` | risk level reported by the scan (`low`, `medium`, `high`) |
+
 ## Version pinning + binary caching
 
 - **Pin a specific Ledgerful release by version + checksum.** Never `latest` — supply-chain hygiene
-  consistent with SHA-pinned Actions. The checksum is verified before exec **even on a cache hit**.
+  consistent with SHA-pinned Actions. The release **archive** (.tar.gz/.zip) checksum is verified
+  before extraction; the cache identity includes the checksum so a version+checksum mismatch never
+  reuses a stale cache entry.
 - **Binary caching:** the wrapper uses `@actions/tool-cache` (`find` → reuse; else `downloadTool` →
-  `cacheDir`) to reuse the pinned binary, authenticates the download with `GITHUB_TOKEN` for the
-  higher authenticated rate limit, and pairs with `actions/cache` keyed on the pinned version +
-  checksum for cross-run persistence on ephemeral runners.
+  `cacheDir`) to reuse the pinned binary and authenticates the download with `GITHUB_TOKEN` for the
+  higher authenticated rate limit. `tool-cache` provides runner-local persistence; for cross-run
+  persistence on ephemeral hosted runners, users can add an `actions/cache` step keyed on the pinned
+  version + checksum — see the example in the Workflow A snippet below.
 - **Pin this Action itself** by commit SHA (`@<pinned-sha>`), not by tag.
+
+### Optional cross-run binary cache
+
+For ephemeral hosted runners, add an `actions/cache` step before the scan step, keyed on the pinned
+version + checksum. `@actions/tool-cache` already provides runner-local persistence via
+`RUNNER_TOOL_CACHE` (sufficient for self-hosted runners); `actions/cache` is only needed when
+runners are ephemeral AND you want to avoid re-downloading across runs. The cache path must target
+the tool-cache directory for the pinned version, e.g.:
+
+```yaml
+      - name: Cache Ledgerful binary (optional, cross-run persistence)
+        uses: actions/cache@<pinned-sha>
+        with:
+          path: ${{ runner.tool_cache }}/ledgerful/<version>/<arch>
+          key: ledgerful-<version>-<checksum>-${{ runner.os }}-${{ runner.arch }}
+```
 
 ## Why `fetch-depth: 0` is required
 
@@ -120,14 +176,22 @@ snippet above already sets it. Do not remove it.
 
 ```json
 {
-  "schema_version": 1,
-  "risk_summary": { ... },
-  "hotspots": [ ... ],
-  "files": [ ... ]
+  "schemaVersion": 1,
+  "generatedAt": "ISO-8601 UTC",
+  "baseRef": "main",
+  "headRef": "HEAD",
+  "headHash": "abc...",
+  "branchName": "feature/x",
+  "treeClean": true,
+  "changeCount": 3,
+  "changes": [{ "path": "src/foo.rs", "changeType": "modified" }],
+  "riskLevel": "low",
+  "riskReasons": [],
+  "analysisWarnings": []
 }
 ```
 
-Breaking changes bump `schema_version`; the Action pins a version. Deterministic for a given diff +
+Breaking changes bump `schemaVersion`; the Action pins a version. Deterministic for a given diff +
 pinned engine version.
 
 ## Security posture
@@ -136,7 +200,7 @@ pinned engine version.
   never interpolated into shell or comment markdown unescaped (reuse of Ledgerful's 0031
   sanitization discipline). A malicious PR cannot inject into the posted comment or the runner shell.
 - **Token scope:** this Action never echoes `GITHUB_TOKEN`. Fork-PR runs never receive repo secrets.
-  The binary is checksum-verified before execution.
+  The release archive is checksum-verified before extraction.
 - **No egress from the engine:** the binary is invoked offline; only the wrapper talks to
   `api.github.com`. A test/inspection asserts the engine made no network call during the scan.
 

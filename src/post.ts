@@ -165,7 +165,7 @@ async function upsertCheckRun(
 
   const summary = renderCheckRunSummary(report);
   const text = fs.existsSync(reportPath)
-    ? `<details><summary>Raw PR scan report</summary>\n\n\`\`\`json\n${escapeHtml(fs.readFileSync(reportPath, "utf8"))}\n\`\`\`\n</details>`
+    ? `<details><summary>Raw PR scan report</summary>\n\n\`\`\`json\n${escapeHtml(fs.readFileSync(reportPath, "utf8").replace(/`/g, "\\`"))}\n\`\`\`\n</details>`
     : "Raw report not available.";
 
   const params = {

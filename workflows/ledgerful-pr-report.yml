@@ -29,7 +29,10 @@ jobs:
           github-token: ${{ github.token }}
 
       - name: Post risk summary
-        uses: Ryan-AI-Studios/ledgerful-action@v0.1.0 # pin to the commit SHA of a release for production
+        # Pin ledgerful-action to a specific commit SHA for supply-chain hygiene.
+        # @v0.1.0 is shown for readability; replace with @<commit-sha> in production
+        # (find the SHA at https://github.com/Ryan-AI-Studios/ledgerful-action/releases).
+        uses: Ryan-AI-Studios/ledgerful-action@v0.1.0
         with:
           github-token: ${{ github.token }}
           report-path: ledgerful-pr-report.json

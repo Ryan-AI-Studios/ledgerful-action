@@ -121,4 +121,34 @@ describe("Workflow B integration", () => {
 
     fs.rmSync(dir, { recursive: true, force: true });
   });
+
+  it("escapes backticks in raw report JSON to prevent code-fence injection", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ledgerful-int-bt-"));
+    const reportPath = path.join(dir, "ledgerful-pr-report.json");
+    const tampered = JSON.stringify({
+      ...adversarialReport,
+      analysisWarnings: ["```\nconsole.log('injected')\n```"],
+    });
+    fs.writeFileSync(reportPath, tampered, "utf8");
+
+    const octokit = createOctokit([], []) as unknown as ReturnType<typeof github.getOctokit>;
+    vi.mocked(github.getOctokit).mockReturnValue(octokit);
+
+    await postSummary({
+      token: "test-token",
+      report: { ...adversarialReport, analysisWarnings: ["```\nconsole.log('injected')\n```"] },
+      reportPath,
+      checkRunName: "Ledgerful PR Risk Report",
+    });
+
+    const checkRunCall = vi.mocked(octokit.rest.checks.create).mock.calls[0]?.[0];
+    if (!checkRunCall?.output) throw new Error("checks.create was not called with output");
+    // Backticks must be escaped so triple-backtick sequences cannot close the code fence early
+    expect(checkRunCall.output.text).not.toMatch(/```json\n[^\n]*```\n/);
+    expect(checkRunCall.output.text).toContain("\\`");
+    // The raw JSON content must still be present (escaped) inside the details block
+    expect(checkRunCall.output.text).toContain("console.log");
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
 });

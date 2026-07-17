@@ -55,7 +55,10 @@ jobs:
       # binary persistence on ephemeral hosted runners (tool-cache already provides
       # runner-local persistence via RUNNER_TOOL_CACHE; see "Optional cross-run binary cache" below).
       - name: Run Ledgerful PR risk scan
-        uses: Ryan-AI-Studios/ledgerful-action@v0.1.0 # pin to the commit SHA of a release for production
+        # Pin ledgerful-action to a specific commit SHA for supply-chain hygiene.
+        # @v0.1.0 is shown for readability; replace with @<commit-sha> in production
+        # (find the SHA at https://github.com/Ryan-AI-Studios/ledgerful-action/releases).
+        uses: Ryan-AI-Studios/ledgerful-action@v0.1.0
         with:
           ledgerful-version: v0.1.8
           # checksum for ledgerful-x86_64-unknown-linux-gnu.tar.gz (v0.1.8); substitute for other OS/arch
@@ -98,7 +101,10 @@ jobs:
           github-token: ${{ github.token }}
 
       - name: Post risk summary
-        uses: Ryan-AI-Studios/ledgerful-action@v0.1.0 # pin to the commit SHA of a release for production
+        # Pin ledgerful-action to a specific commit SHA for supply-chain hygiene.
+        # @v0.1.0 is shown for readability; replace with @<commit-sha> in production
+        # (find the SHA at https://github.com/Ryan-AI-Studios/ledgerful-action/releases).
+        uses: Ryan-AI-Studios/ledgerful-action@v0.1.0
         with:
           github-token: ${{ github.token }}
           report-path: ledgerful-pr-report.json
@@ -117,7 +123,7 @@ jobs:
 | input | required | default | description |
 | --- | --- | --- | --- |
 | `ledgerful-version` | no | `v0.1.8` | pinned engine release version |
-| `ledgerful-checksum` | yes | — | SHA-256 of the release binary for the runner OS/arch; required in Workflow A |
+| `ledgerful-checksum` | yes | — | SHA-256 of the release archive (.tar.gz/.zip) for the runner OS/arch; required in Workflow A |
 | `github-token` | no | `${{ github.token }}` | token used to authenticate the release download in Workflow A and to post the comment / check-run in Workflow B |
 | `fail-on` | no | — | optional `low`/`medium`/`high` threshold that fails the build non-blockingly |
 
@@ -131,7 +137,9 @@ jobs:
 ## Version pinning + binary caching
 
 - **Pin a specific Ledgerful release by version + checksum.** Never `latest` — supply-chain hygiene
-  consistent with SHA-pinned Actions. The checksum is verified before exec **even on a cache hit**.
+  consistent with SHA-pinned Actions. The release **archive** (.tar.gz/.zip) checksum is verified
+  before extraction; the cache identity includes the checksum so a version+checksum mismatch never
+  reuses a stale cache entry.
 - **Binary caching:** the wrapper uses `@actions/tool-cache` (`find` → reuse; else `downloadTool` →
   `cacheDir`) to reuse the pinned binary and authenticates the download with `GITHUB_TOKEN` for the
   higher authenticated rate limit. `tool-cache` provides runner-local persistence; for cross-run
@@ -192,7 +200,7 @@ pinned engine version.
   never interpolated into shell or comment markdown unescaped (reuse of Ledgerful's 0031
   sanitization discipline). A malicious PR cannot inject into the posted comment or the runner shell.
 - **Token scope:** this Action never echoes `GITHUB_TOKEN`. Fork-PR runs never receive repo secrets.
-  The binary is checksum-verified before execution.
+  The release archive is checksum-verified before extraction.
 - **No egress from the engine:** the binary is invoked offline; only the wrapper talks to
   `api.github.com`. A test/inspection asserts the engine made no network call during the scan.
 

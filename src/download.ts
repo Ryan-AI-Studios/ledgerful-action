@@ -108,8 +108,11 @@ async function downloadAndCache(
   token: string | undefined,
 ): Promise<{ binaryPath: string; info: AssetInfo }> {
   const info = getAssetInfo();
+  // Include the checksum in the cache identity so a cache hit for the same
+  // version but a DIFFERENT checksum does not reuse a mismatched binary.
   const cacheName = `ledgerful-${version}-${info.assetName}`;
-  const cached = tc.find(cacheName, version);
+  const cacheVersion = `${version}-${checksum.toLowerCase().trim().slice(0, 16)}`;
+  const cached = tc.find(cacheName, cacheVersion);
 
   let binaryDir = "";
   if (cached) {
@@ -147,7 +150,7 @@ async function downloadAndCache(
       throw new Error(`Failed to extract ${info.assetName}`);
     }
 
-    binaryDir = await tc.cacheDir(extractedDir, cacheName, version);
+    binaryDir = await tc.cacheDir(extractedDir, cacheName, cacheVersion);
   }
 
   const binaryPath = path.join(binaryDir, info.executableName);

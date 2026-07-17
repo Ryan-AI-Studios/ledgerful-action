@@ -97,6 +97,22 @@ jobs:
 > Workflow B runs in the **base-repo context** with a write token and **never executes PR code.**
 > Workflow A is read-only and receives no secrets. Fork PRs get no secrets and no write token.
 
+## Action inputs
+
+| input | required | default | description |
+| --- | --- | --- | --- |
+| `ledgerful-version` | no | `v0.1.8` | pinned engine release version |
+| `ledgerful-checksum` | yes* | — | SHA-256 of the release binary for the runner OS/arch; required in Workflow A |
+| `github-token` | no | `${{ github.token }}` | token used to post the comment / check-run (Workflow B only) |
+| `fail-on` | no | — | optional `low`/`medium`/`high` threshold that fails the build non-blockingly |
+
+## Action outputs
+
+| output | description |
+| --- | --- |
+| `report-path` | path to the JSON report written by Workflow A |
+| `risk-level` | risk level reported by the scan (`low`, `medium`, `high`) |
+
 ## Version pinning + binary caching
 
 - **Pin a specific Ledgerful release by version + checksum.** Never `latest` — supply-chain hygiene
@@ -120,14 +136,22 @@ snippet above already sets it. Do not remove it.
 
 ```json
 {
-  "schema_version": 1,
-  "risk_summary": { ... },
-  "hotspots": [ ... ],
-  "files": [ ... ]
+  "schemaVersion": 1,
+  "generatedAt": "ISO-8601 UTC",
+  "baseRef": "main",
+  "headRef": "HEAD",
+  "headHash": "abc...",
+  "branchName": "feature/x",
+  "treeClean": true,
+  "changeCount": 3,
+  "changes": [{ "path": "src/foo.rs", "changeType": "modified" }],
+  "riskLevel": "low",
+  "riskReasons": [],
+  "analysisWarnings": []
 }
 ```
 
-Breaking changes bump `schema_version`; the Action pins a version. Deterministic for a given diff +
+Breaking changes bump `schemaVersion`; the Action pins a version. Deterministic for a given diff +
 pinned engine version.
 
 ## Security posture

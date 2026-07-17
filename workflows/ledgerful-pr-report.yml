@@ -32,3 +32,4 @@ jobs:
         uses: Ryan-AI-Studios/ledgerful-action@<pinned-sha>
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          report-path: ledgerful-pr-report.json

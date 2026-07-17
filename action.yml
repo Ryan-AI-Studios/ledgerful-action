@@ -8,18 +8,25 @@ branding:
 inputs:
   ledgerful-version:
     description: Pinned Ledgerful engine release version to run (e.g. v0.1.8). Not `latest` — supply-chain hygiene.
-    required: true
+    required: false
+    default: 'v0.1.8'
   ledgerful-checksum:
-    description: SHA-256 checksum of the pinned release binary for the runner's OS/arch. Verified before exec, even on cache hit.
-    required: true
+    description: SHA-256 checksum of the pinned release binary for the runner's OS/arch. Verified before exec, even on cache hit. Required when running Workflow A (scan).
+    required: false
   github-token:
     description: GITHUB_TOKEN used to post the PR comment / check-run. Workflow B uses a write scope; Workflow A is read-only and never receives this.
     required: false
     default: ${{ github.token }}
   fail-on:
-    description: Optional non-blocking fail condition (e.g. high). Reporting only — policy enforcement is out of scope here.
+    description: Optional non-blocking fail condition (low|medium|high). Reporting only — policy enforcement is out of scope here.
     required: false
     default: ''
+
+outputs:
+  report-path:
+    description: Path to the JSON report written by Workflow A.
+  risk-level:
+    description: Risk level reported by the scan (low, medium, high).
 
 runs:
   using: node24

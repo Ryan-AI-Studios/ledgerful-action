@@ -1,29 +1,94 @@
-// Ledgerful Action — entry point.
-//
-// This is the wrapper: download + checksum-verify the pinned Ledgerful release,
-// run `ledgerful scan --pr <base>...<head> --format json` offline, render a summary,
-// and post it as a PR comment / check-run via GITHUB_TOKEN.
-//
-// The network call lives HERE, never in the engine. The engine has no network code.
-// PR diff/title are untrusted data — escape all interpolation into shell or markdown.
-//
-// See track 0047 spec/plan for the full contract. This file is a minimal scaffold.
-
+import * as fs from "node:fs";
 import * as core from "@actions/core";
+import { installLedgerful } from "./download.js";
+import { postSummary } from "./post.js";
+import { runScan } from "./run.js";
+import { assertSchemaVersion, type PrScanReport } from "./schema.js";
 
-async function run(): Promise<void> {
+function isWorkflowB(): boolean {
+  const eventName = process.env.GITHUB_EVENT_NAME ?? "";
+  return eventName === "workflow_run";
+}
+
+function getArtifactUrlFromWorkflowRun(): string | undefined {
+  const runId = process.env.GITHUB_RUN_ID;
+  const repo = process.env.GITHUB_REPOSITORY;
+  if (!runId || !repo) return undefined;
+  return `https://github.com/${repo}/actions/runs/${runId}`;
+}
+
+async function runWorkflowA(): Promise<void> {
   const version = core.getInput("ledgerful-version", { required: true });
   const checksum = core.getInput("ledgerful-checksum", { required: true });
-  const failOn = core.getInput("fail-on") || "";
+  const githubToken = core.getInput("github-token");
 
-  core.info(
-    `Ledgerful Action scaffold — version=${version} fail-on=${failOn || "(none)"}`,
-  );
-  core.warning(
-    "Action implementation is in progress (track 0047). " +
-      "Binary download + checksum verify + scan + render + post not yet wired.",
-  );
-  core.setFailed("ledgerful-action: not yet implemented (track 0047 in progress)");
+  const binaryPath = await installLedgerful(version, checksum, githubToken);
+
+  const baseRef = process.env.GITHUB_BASE_REF ?? "main";
+  const headRef = process.env.GITHUB_HEAD_REF ?? "HEAD";
+  const cwd = process.env.GITHUB_WORKSPACE ?? process.cwd();
+
+  const reportPath =
+    process.env.LEDGERFUL_REPORT_PATH ?? "ledgerful-pr-report.json";
+
+  const report = await runScan({
+    binaryPath,
+    baseRef,
+    headRef,
+    outputPath: reportPath,
+    cwd,
+  });
+
+  if (report.changeCount === 0) {
+    core.info("No changes detected in PR scan.");
+  }
+
+  core.setOutput("report-path", reportPath);
+  core.setOutput("risk-level", report.riskLevel);
+
+  const failOn = core.getInput("fail-on").toLowerCase();
+  if (failOn && shouldFail(report.riskLevel, failOn)) {
+    core.setFailed(
+      `PR risk level ${report.riskLevel} meets fail-on threshold ${failOn}.`,
+    );
+  }
+}
+
+function shouldFail(riskLevel: string, failOn: string): boolean {
+  const levels = ["low", "medium", "high"];
+  const riskIndex = levels.indexOf(riskLevel);
+  const failIndex = levels.indexOf(failOn);
+  return failIndex !== -1 && riskIndex >= failIndex;
+}
+
+async function runWorkflowB(): Promise<void> {
+  const token = core.getInput("github-token", { required: true });
+  const reportPath =
+    core.getInput("report-path") ||
+    process.env.LEDGERFUL_REPORT_PATH ||
+    "ledgerful-pr-report.json";
+
+  const raw = fs.readFileSync(reportPath, "utf8");
+  const report: PrScanReport = JSON.parse(raw) as PrScanReport;
+  assertSchemaVersion(report);
+
+  await postSummary({
+    token,
+    report,
+    reportPath,
+    artifactUrl: getArtifactUrlFromWorkflowRun(),
+    checkRunName: "Ledgerful PR Risk Report",
+  });
+}
+
+async function run(): Promise<void> {
+  if (isWorkflowB()) {
+    core.info("Running in Workflow B mode (workflow_run) — posting report.");
+    await runWorkflowB();
+  } else {
+    core.info("Running in Workflow A mode (scan) — executing engine offline.");
+    await runWorkflowA();
+  }
 }
 
 run().catch((err: unknown) => {

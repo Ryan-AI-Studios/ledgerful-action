@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-07-17T21:05:24.708717700+00:00",
+  "baseRef": "main",
+  "headRef": "HEAD",
+  "headHash": "5002402f413a3ebd3af4691fb5aaebc1b73d5fb4",
+  "branchName": "feature/0047-github-action-surface",
+  "treeClean": true,
+  "changeCount": 4,
+  "changes": [
+    { "path": "src/download.ts", "changeType": "added" },
+    { "path": "src/index.ts", "changeType": "modified" },
+    { "path": "src/post.ts", "changeType": "added" },
+    { "path": "src/render.ts", "changeType": "added" }
+  ],
+  "riskLevel": "medium",
+  "riskReasons": [
+    "network call isolated in wrapper",
+    "new TypeScript surface touches token scope"
+  ],
+  "analysisWarnings": []
+}

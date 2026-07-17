@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-07-17T21:05:24.708717700+00:00",
+  "baseRef": "main",
+  "headRef": "HEAD",
+  "headHash": "abc123def456",
+  "branchName": "feature/adversarial-injection",
+  "treeClean": true,
+  "changeCount": 5,
+  "changes": [
+    { "path": "src/\u003cscript\u003ealert(1)\u003c/script\u003e.ts", "changeType": "added" },
+    { "path": "src/`rm -rf /`.ts", "changeType": "modified" },
+    { "path": "src/${IFS}env.ts", "changeType": "added" },
+    { "path": "src/<!-- ledgerful-action:pr-comment -->.md", "changeType": "added" },
+    { "path": "src/[bidi]\u202e\u202d.ts", "changeType": "renamed" }
+  ],
+  "riskLevel": "high",
+  "riskReasons": [
+    "\u003c!-- hidden comment --\u003e",
+    "${IFS} shell meta",
+    "`backtick` substitution",
+    "[link](javascript:alert(1))",
+    "\u003cscript\u003ealert(1)\u003c/script\u003e"
+  ],
+  "analysisWarnings": ["[bidi]\u202e\u202d marker detected"]
+}

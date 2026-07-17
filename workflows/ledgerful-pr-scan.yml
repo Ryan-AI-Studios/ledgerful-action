@@ -26,6 +26,7 @@ jobs:
           fetch-depth: 0
 
       - name: Run Ledgerful PR risk scan
+        id: ledgerful-scan
         uses: Ryan-AI-Studios/ledgerful-action@<pinned-sha>
         with:
           ledgerful-version: v0.1.8

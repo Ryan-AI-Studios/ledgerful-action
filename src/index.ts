@@ -27,6 +27,36 @@ function getArtifactUrlFromWorkflowRun(): string | undefined {
   }
 }
 
+/**
+ * Resolve the git range for `scan --pr`.
+ *
+ * Prefer commit SHAs from the `pull_request` event payload. Branch names from
+ * `GITHUB_BASE_REF` / `GITHUB_HEAD_REF` (e.g. `main`) are often not present as
+ * local refs after `actions/checkout`, even with `fetch-depth: 0` — that caused
+ * "base commit 'main' is not present in the local clone" on the Action's own CI.
+ */
+export function resolvePrRange(): { baseRef: string; headRef: string } {
+  const eventPath = process.env.GITHUB_EVENT_PATH;
+  if (eventPath) {
+    try {
+      const event = JSON.parse(fs.readFileSync(eventPath, "utf8")) as {
+        pull_request?: { base?: { sha?: string }; head?: { sha?: string } };
+      };
+      const baseSha = event.pull_request?.base?.sha?.trim();
+      const headSha = event.pull_request?.head?.sha?.trim();
+      if (baseSha && headSha) {
+        return { baseRef: baseSha, headRef: headSha };
+      }
+    } catch {
+      // fall through to env-name fallback
+    }
+  }
+  return {
+    baseRef: process.env.GITHUB_BASE_REF ?? "main",
+    headRef: process.env.GITHUB_HEAD_REF ?? "HEAD",
+  };
+}
+
 async function runWorkflowA(): Promise<void> {
   const version = core.getInput("ledgerful-version", { required: true });
   const checksum = core.getInput("ledgerful-checksum", { required: true });
@@ -34,8 +64,7 @@ async function runWorkflowA(): Promise<void> {
 
   const binaryPath = await installLedgerful(version, checksum, githubToken);
 
-  const baseRef = process.env.GITHUB_BASE_REF ?? "main";
-  const headRef = process.env.GITHUB_HEAD_REF ?? "HEAD";
+  const { baseRef, headRef } = resolvePrRange();
   const cwd = process.env.GITHUB_WORKSPACE ?? process.cwd();
 
   const reportPath =

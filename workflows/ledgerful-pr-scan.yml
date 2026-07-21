@@ -8,9 +8,9 @@
 # IMPORTANT: actions/checkout MUST use fetch-depth: 0 (default 1 omits the base commit,
 # so `ledgerful scan --pr <base>...<head>` can't compute the diff).
 #
-# The checksum below is for ledgerful-x86_64-unknown-linux-gnu.tar.gz from v0.1.8.
-# For other runners, substitute the matching checksum from the release page:
-# https://github.com/Ryan-AI-Studios/Ledgerful/releases/tag/v0.1.8
+# The checksum below is for ledgerful-x86_64-unknown-linux-gnu.tar.gz from v0.1.9
+# (published .sha256 sidecar). For other runners, substitute the matching checksum:
+# https://github.com/Ryan-AI-Studios/Ledgerful/releases/tag/v0.1.9
 
 name: Ledgerful PR Scan
 
@@ -34,13 +34,12 @@ jobs:
       # runner-local persistence via RUNNER_TOOL_CACHE; see "Optional cross-run binary cache" in README).
       - name: Run Ledgerful PR risk scan
         id: ledgerful-scan
-        # Pin ledgerful-action to a specific commit SHA for supply-chain hygiene.
-        # @v0.1.0 is shown for readability; replace with @<commit-sha> in production
-        # (find the SHA at https://github.com/Ryan-AI-Studios/ledgerful-action/releases).
-        uses: Ryan-AI-Studios/ledgerful-action@v0.1.0
+        # No mutable release tag yet — pin the full commit SHA from
+        # https://github.com/Ryan-AI-Studios/ledgerful-action (main).
+        uses: Ryan-AI-Studios/ledgerful-action@0d74d8ac4a86f9345a2c50daba71067b06856ea0
         with:
-          ledgerful-version: v0.1.8
-          ledgerful-checksum: 0ecba8040149f351448362bad3ea3ec940a59cf9fc719b90b7d6f2ac2649341a
+          ledgerful-version: v0.1.9
+          ledgerful-checksum: ab203f8de80597dcd8294c3e87a2198113428c7a5d39cecaf8a37ce36f1a01ff
         env:
           LEDGERFUL_NO_NETWORK: "1"
 

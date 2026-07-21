@@ -125,10 +125,12 @@ async function downloadAndCache(
   token: string | undefined,
 ): Promise<{ binaryPath: string; info: AssetInfo }> {
   const info = getAssetInfo();
-  // Include the checksum in the cache identity so a cache hit for the same
-  // version but a DIFFERENT checksum does not reuse a mismatched binary.
+  // Include the FULL checksum in the cache identity so a cache hit for the
+  // same version but a different checksum cannot reuse a mismatched binary.
+  // Truncating to 16 hex chars (old behavior) allowed a theoretical prefix
+  // collision; the full 64-char SHA-256 is a valid tool-cache version string.
   const cacheName = `ledgerful-${version}-${info.assetName}`;
-  const cacheVersion = `${version}-${checksum.toLowerCase().trim().slice(0, 16)}`;
+  const cacheVersion = `${version}-${checksum.toLowerCase().trim()}`;
   const cached = tc.find(cacheName, cacheVersion);
 
   let binaryDir = "";

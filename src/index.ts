@@ -34,6 +34,10 @@ function getArtifactUrlFromWorkflowRun(): string | undefined {
  * `GITHUB_BASE_REF` / `GITHUB_HEAD_REF` (e.g. `main`) are often not present as
  * local refs after `actions/checkout`, even with `fetch-depth: 0` — that caused
  * "base commit 'main' is not present in the local clone" on the Action's own CI.
+ *
+ * On `push` events, GitHub sets BASE/HEAD_REF to empty strings (not unset), so
+ * `??` alone is wrong — treat empty as missing. Fall back to
+ * `github.event.before...github.sha` when present, else `HEAD~1...HEAD`.
  */
 export function resolvePrRange(): { baseRef: string; headRef: string } {
   const eventPath = process.env.GITHUB_EVENT_PATH;
@@ -41,19 +45,33 @@ export function resolvePrRange(): { baseRef: string; headRef: string } {
     try {
       const event = JSON.parse(fs.readFileSync(eventPath, "utf8")) as {
         pull_request?: { base?: { sha?: string }; head?: { sha?: string } };
+        before?: string;
+        after?: string;
       };
       const baseSha = event.pull_request?.base?.sha?.trim();
       const headSha = event.pull_request?.head?.sha?.trim();
       if (baseSha && headSha) {
         return { baseRef: baseSha, headRef: headSha };
       }
+      // push event: before is the previous tip (zeros on new branch create)
+      const before = event.before?.trim();
+      const after =
+        event.after?.trim() ||
+        process.env.GITHUB_SHA?.trim() ||
+        "";
+      const zero = "0000000000000000000000000000000000000000";
+      if (before && before !== zero && after) {
+        return { baseRef: before, headRef: after };
+      }
     } catch {
-      // fall through to env-name fallback
+      // fall through
     }
   }
+  const baseEnv = process.env.GITHUB_BASE_REF?.trim();
+  const headEnv = process.env.GITHUB_HEAD_REF?.trim();
   return {
-    baseRef: process.env.GITHUB_BASE_REF ?? "main",
-    headRef: process.env.GITHUB_HEAD_REF ?? "HEAD",
+    baseRef: baseEnv || "HEAD~1",
+    headRef: headEnv || process.env.GITHUB_SHA?.trim() || "HEAD",
   };
 }
 

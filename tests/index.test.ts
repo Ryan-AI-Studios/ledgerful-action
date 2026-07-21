@@ -84,7 +84,7 @@ describe("resolveReportPath", () => {
     vi.mocked(core.getInput).mockImplementation((name: string) => {
       if (name === "github-token") return "token";
       if (name === "report-path") return "ledgerful-pr-report.json";
-      if (name === "ledgerful-version") return "v0.1.8";
+      if (name === "ledgerful-version") return "v0.1.9";
       if (name === "ledgerful-checksum") return "dummy";
       if (name === "fail-on") return "";
       return "";

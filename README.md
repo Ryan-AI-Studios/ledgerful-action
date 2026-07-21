@@ -55,14 +55,14 @@ jobs:
       # binary persistence on ephemeral hosted runners (tool-cache already provides
       # runner-local persistence via RUNNER_TOOL_CACHE; see "Optional cross-run binary cache" below).
       - name: Run Ledgerful PR risk scan
-        # Pin ledgerful-action to a specific commit SHA for supply-chain hygiene.
-        # @v0.1.0 is shown for readability; replace with @<commit-sha> in production
-        # (find the SHA at https://github.com/Ryan-AI-Studios/ledgerful-action/releases).
-        uses: Ryan-AI-Studios/ledgerful-action@v0.1.0
+        # No mutable release tag yet — pin the full commit SHA from
+        # https://github.com/Ryan-AI-Studios/ledgerful-action (main).
+        # Replace <FULL_COMMIT_SHA> with the 40-char SHA of the commit you want.
+        uses: Ryan-AI-Studios/ledgerful-action@<FULL_COMMIT_SHA>
         with:
-          ledgerful-version: v0.1.8
-          # checksum for ledgerful-x86_64-unknown-linux-gnu.tar.gz (v0.1.8); substitute for other OS/arch
-          ledgerful-checksum: 0ecba8040149f351448362bad3ea3ec940a59cf9fc719b90b7d6f2ac2649341a
+          ledgerful-version: v0.1.9
+          # checksum for ledgerful-x86_64-unknown-linux-gnu.tar.gz (v0.1.9); substitute for other OS/arch
+          ledgerful-checksum: ab203f8de80597dcd8294c3e87a2198113428c7a5d39cecaf8a37ce36f1a01ff
         env:
           LEDGERFUL_NO_NETWORK: "1"   # assert the engine made no network call during the scan
 
@@ -101,19 +101,19 @@ jobs:
           github-token: ${{ github.token }}
 
       - name: Post risk summary
-        # Pin ledgerful-action to a specific commit SHA for supply-chain hygiene.
-        # @v0.1.0 is shown for readability; replace with @<commit-sha> in production
-        # (find the SHA at https://github.com/Ryan-AI-Studios/ledgerful-action/releases).
-        uses: Ryan-AI-Studios/ledgerful-action@v0.1.0
+        # No mutable release tag yet — pin the full commit SHA from
+        # https://github.com/Ryan-AI-Studios/ledgerful-action (main).
+        # Replace <FULL_COMMIT_SHA> with the 40-char SHA of the commit you want.
+        uses: Ryan-AI-Studios/ledgerful-action@<FULL_COMMIT_SHA>
         with:
           github-token: ${{ github.token }}
           report-path: ledgerful-pr-report.json
 ```
 
 > **Pinning notes:** first-party Actions (`actions/checkout`, `actions/upload-artifact`,
-> `actions/download-artifact`) are SHA-pinned to the versions shown. Pin `ledgerful-action` to the
-> commit SHA of the release you want to use (the `@v0.1.0` tag is shown for readability — replace
-> it with `@<commit-sha>` for supply-chain hygiene).
+> `actions/download-artifact`) are SHA-pinned to the versions shown. Pin `ledgerful-action` to a
+> **full 40-char commit SHA** (`@<FULL_COMMIT_SHA>`) — there is no mutable release tag yet. Take the
+> SHA from https://github.com/Ryan-AI-Studios/ledgerful-action (main) of the commit you want.
 
 > Workflow B runs in the **base-repo context** with a write token and **never executes PR code.**
 > Workflow A is read-only and receives no secrets. Fork PRs get no secrets and no write token.
@@ -122,7 +122,7 @@ jobs:
 
 | input | required | default | description |
 | --- | --- | --- | --- |
-| `ledgerful-version` | no | `v0.1.8` | pinned engine release version |
+| `ledgerful-version` | no | `v0.1.9` | pinned engine release version |
 | `ledgerful-checksum` | yes | — | SHA-256 of the release archive (.tar.gz/.zip) for the runner OS/arch; required in Workflow A |
 | `github-token` | no | `${{ github.token }}` | token used to authenticate the release download in Workflow A and to post the comment / check-run in Workflow B |
 | `fail-on` | no | — | optional `low`/`medium`/`high` threshold that fails the build non-blockingly |
@@ -145,7 +145,8 @@ jobs:
   higher authenticated rate limit. `tool-cache` provides runner-local persistence; for cross-run
   persistence on ephemeral hosted runners, users can add an `actions/cache` step keyed on the pinned
   version + checksum — see the example in the Workflow A snippet below.
-- **Pin this Action itself** by commit SHA (`@<pinned-sha>`), not by tag.
+- **Pin this Action itself** by full 40-char commit SHA (`@<FULL_COMMIT_SHA>`). No mutable release
+  tag exists yet — do not use a floating branch ref for production.
 
 ### Optional cross-run binary cache
 

@@ -11,7 +11,7 @@ import {
 } from "../src/download.js";
 
 const knownLinuxChecksum =
-  "0ecba8040149f351448362bad3ea3ec940a59cf9fc719b90b7d6f2ac2649341a";
+  "ab203f8de80597dcd8294c3e87a2198113428c7a5d39cecaf8a37ce36f1a01ff";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -111,7 +111,7 @@ describe("installLedgerful", () => {
 
       vi.spyOn(tc, "find").mockReturnValue(dir);
 
-      const result = await installLedgerful("v0.1.8", knownLinuxChecksum, undefined);
+      const result = await installLedgerful("v0.1.9", knownLinuxChecksum, undefined);
       expect(result).toBe(bin);
       expect(fs.existsSync(result)).toBe(true);
     } finally {
@@ -131,7 +131,7 @@ describe("installLedgerful", () => {
       vi.spyOn(tc, "find").mockReturnValue(dir);
 
       await expect(
-        installLedgerful("v0.1.8", knownLinuxChecksum, undefined),
+        installLedgerful("v0.1.9", knownLinuxChecksum, undefined),
       ).rejects.toThrow(/binary not found/);
     } finally {
       Object.defineProperty(process, "platform", { value: originalPlatform });
@@ -153,7 +153,7 @@ describe("installLedgerful", () => {
 
       vi.spyOn(tc, "find").mockReturnValue(dir);
 
-      const result = await installLedgerful("v0.1.8", knownLinuxChecksum, undefined);
+      const result = await installLedgerful("v0.1.9", knownLinuxChecksum, undefined);
       expect(result).toBe(bin);
       expect(fs.existsSync(result)).toBe(true);
     } finally {

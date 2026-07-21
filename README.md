@@ -110,7 +110,7 @@ jobs:
 
 > **Pinning notes:** first-party Actions (`actions/checkout`, `actions/upload-artifact`,
 > `actions/download-artifact`) are SHA-pinned to the versions shown. Pin `ledgerful-action` to a
-> **full 40-char commit SHA** ((`@<40-char-sha>`)) — there is no mutable release tag yet. Take the
+> **full 40-char commit SHA** (`@<40-char-sha>`) — there is no mutable release tag yet. Take the
 > SHA from https://github.com/Ryan-AI-Studios/ledgerful-action (main) of the commit you want.
 
 > Workflow B runs in the **base-repo context** with a write token and **never executes PR code.**
@@ -143,7 +143,7 @@ jobs:
   higher authenticated rate limit. `tool-cache` provides runner-local persistence; for cross-run
   persistence on ephemeral hosted runners, users can add an `actions/cache` step keyed on the pinned
   version + checksum — see the example in the Workflow A snippet below.
-- **Pin this Action itself** by full 40-char commit SHA ((`@<40-char-sha>`)). No mutable release
+- **Pin this Action itself** by full 40-char commit SHA (`@<40-char-sha>`). No mutable release
   tag exists yet — do not use a floating branch ref for production.
 
 ### Optional cross-run binary cache

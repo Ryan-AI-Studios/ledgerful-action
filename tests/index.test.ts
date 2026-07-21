@@ -180,3 +180,44 @@ describe("getArtifactUrlFromWorkflowRun", () => {
     fs.rmSync(tmpEvent, { force: true });
   });
 });
+
+describe("resolvePrRange", () => {
+  it("prefers pull_request base/head SHAs from the event payload", () => {
+    const eventPath = path.join(os.tmpdir(), `ledgerful-event-${Date.now()}.json`);
+    fs.writeFileSync(
+      eventPath,
+      JSON.stringify({
+        pull_request: {
+          base: { sha: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+          head: { sha: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" },
+        },
+      }),
+      "utf8",
+    );
+    process.env.GITHUB_EVENT_PATH = eventPath;
+    process.env.GITHUB_BASE_REF = "main";
+    process.env.GITHUB_HEAD_REF = "feature/x";
+
+    const range = runModule.resolvePrRange();
+    expect(range.baseRef).toBe("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+    expect(range.headRef).toBe("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+
+    fs.unlinkSync(eventPath);
+    delete process.env.GITHUB_EVENT_PATH;
+    delete process.env.GITHUB_BASE_REF;
+    delete process.env.GITHUB_HEAD_REF;
+  });
+
+  it("falls back to GITHUB_BASE_REF / GITHUB_HEAD_REF when no event SHAs", () => {
+    delete process.env.GITHUB_EVENT_PATH;
+    process.env.GITHUB_BASE_REF = "develop";
+    process.env.GITHUB_HEAD_REF = "feature/y";
+
+    const range = runModule.resolvePrRange();
+    expect(range.baseRef).toBe("develop");
+    expect(range.headRef).toBe("feature/y");
+
+    delete process.env.GITHUB_BASE_REF;
+    delete process.env.GITHUB_HEAD_REF;
+  });
+});

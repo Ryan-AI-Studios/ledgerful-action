@@ -220,4 +220,43 @@ describe("resolvePrRange", () => {
     delete process.env.GITHUB_BASE_REF;
     delete process.env.GITHUB_HEAD_REF;
   });
+
+  it("uses push before/after SHAs when pull_request is absent", () => {
+    const eventPath = path.join(os.tmpdir(), `ledgerful-push-${Date.now()}.json`);
+    fs.writeFileSync(
+      eventPath,
+      JSON.stringify({
+        before: "cccccccccccccccccccccccccccccccccccccccc",
+        after: "dddddddddddddddddddddddddddddddddddddddd",
+      }),
+      "utf8",
+    );
+    process.env.GITHUB_EVENT_PATH = eventPath;
+    process.env.GITHUB_BASE_REF = "";
+    process.env.GITHUB_HEAD_REF = "";
+
+    const range = runModule.resolvePrRange();
+    expect(range.baseRef).toBe("cccccccccccccccccccccccccccccccccccccccc");
+    expect(range.headRef).toBe("dddddddddddddddddddddddddddddddddddddddd");
+
+    fs.unlinkSync(eventPath);
+    delete process.env.GITHUB_EVENT_PATH;
+    delete process.env.GITHUB_BASE_REF;
+    delete process.env.GITHUB_HEAD_REF;
+  });
+
+  it("treats empty GITHUB_BASE_REF as missing (not empty string range)", () => {
+    delete process.env.GITHUB_EVENT_PATH;
+    process.env.GITHUB_BASE_REF = "";
+    process.env.GITHUB_HEAD_REF = "";
+    process.env.GITHUB_SHA = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
+
+    const range = runModule.resolvePrRange();
+    expect(range.baseRef).toBe("HEAD~1");
+    expect(range.headRef).toBe("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee");
+
+    delete process.env.GITHUB_BASE_REF;
+    delete process.env.GITHUB_HEAD_REF;
+    delete process.env.GITHUB_SHA;
+  });
 });

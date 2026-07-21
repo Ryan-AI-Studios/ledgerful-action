@@ -36,8 +36,7 @@ jobs:
         id: ledgerful-scan
         # No mutable release tag yet — pin the full commit SHA from
         # https://github.com/Ryan-AI-Studios/ledgerful-action (main).
-        # Replace <FULL_COMMIT_SHA> with the 40-char SHA of the commit you want.
-        uses: Ryan-AI-Studios/ledgerful-action@<FULL_COMMIT_SHA>
+        uses: Ryan-AI-Studios/ledgerful-action@0d74d8ac4a86f9345a2c50daba71067b06856ea0
         with:
           ledgerful-version: v0.1.9
           ledgerful-checksum: ab203f8de80597dcd8294c3e87a2198113428c7a5d39cecaf8a37ce36f1a01ff

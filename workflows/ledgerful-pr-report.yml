@@ -31,8 +31,7 @@ jobs:
       - name: Post risk summary
         # No mutable release tag yet — pin the full commit SHA from
         # https://github.com/Ryan-AI-Studios/ledgerful-action (main).
-        # Replace <FULL_COMMIT_SHA> with the 40-char SHA of the commit you want.
-        uses: Ryan-AI-Studios/ledgerful-action@<FULL_COMMIT_SHA>
+        uses: Ryan-AI-Studios/ledgerful-action@0d74d8ac4a86f9345a2c50daba71067b06856ea0
         with:
           github-token: ${{ github.token }}
           report-path: ledgerful-pr-report.json

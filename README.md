@@ -57,8 +57,7 @@ jobs:
       - name: Run Ledgerful PR risk scan
         # No mutable release tag yet — pin the full commit SHA from
         # https://github.com/Ryan-AI-Studios/ledgerful-action (main).
-        # Replace <FULL_COMMIT_SHA> with the 40-char SHA of the commit you want.
-        uses: Ryan-AI-Studios/ledgerful-action@<FULL_COMMIT_SHA>
+        uses: Ryan-AI-Studios/ledgerful-action@0d74d8ac4a86f9345a2c50daba71067b06856ea0
         with:
           ledgerful-version: v0.1.9
           # checksum for ledgerful-x86_64-unknown-linux-gnu.tar.gz (v0.1.9); substitute for other OS/arch
@@ -103,8 +102,7 @@ jobs:
       - name: Post risk summary
         # No mutable release tag yet — pin the full commit SHA from
         # https://github.com/Ryan-AI-Studios/ledgerful-action (main).
-        # Replace <FULL_COMMIT_SHA> with the 40-char SHA of the commit you want.
-        uses: Ryan-AI-Studios/ledgerful-action@<FULL_COMMIT_SHA>
+        uses: Ryan-AI-Studios/ledgerful-action@0d74d8ac4a86f9345a2c50daba71067b06856ea0
         with:
           github-token: ${{ github.token }}
           report-path: ledgerful-pr-report.json
@@ -112,7 +110,7 @@ jobs:
 
 > **Pinning notes:** first-party Actions (`actions/checkout`, `actions/upload-artifact`,
 > `actions/download-artifact`) are SHA-pinned to the versions shown. Pin `ledgerful-action` to a
-> **full 40-char commit SHA** (`@<FULL_COMMIT_SHA>`) — there is no mutable release tag yet. Take the
+> **full 40-char commit SHA** ((`@<40-char-sha>`)) — there is no mutable release tag yet. Take the
 > SHA from https://github.com/Ryan-AI-Studios/ledgerful-action (main) of the commit you want.
 
 > Workflow B runs in the **base-repo context** with a write token and **never executes PR code.**
@@ -145,7 +143,7 @@ jobs:
   higher authenticated rate limit. `tool-cache` provides runner-local persistence; for cross-run
   persistence on ephemeral hosted runners, users can add an `actions/cache` step keyed on the pinned
   version + checksum — see the example in the Workflow A snippet below.
-- **Pin this Action itself** by full 40-char commit SHA (`@<FULL_COMMIT_SHA>`). No mutable release
+- **Pin this Action itself** by full 40-char commit SHA ((`@<40-char-sha>`)). No mutable release
   tag exists yet — do not use a floating branch ref for production.
 
 ### Optional cross-run binary cache

@@ -4,7 +4,7 @@ import * as core from "@actions/core";
 import { installLedgerful } from "./download.js";
 import { postSummary } from "./post.js";
 import { runScan } from "./run.js";
-import { assertSchemaVersion, type PrScanReport } from "./schema.js";
+import { type PrScanReport, validateReport } from "./schema.js";
 
 function isWorkflowB(): boolean {
   const eventName = process.env.GITHUB_EVENT_NAME ?? "";
@@ -75,6 +75,27 @@ export function resolvePrRange(): { baseRef: string; headRef: string } {
   };
 }
 
+/**
+ * Read PR number from the pull_request event payload (Workflow A).
+ * Returns undefined when absent or not a positive integer.
+ */
+export function resolvePrNumberFromEvent(): number | undefined {
+  const eventPath = process.env.GITHUB_EVENT_PATH;
+  if (!eventPath) return undefined;
+  try {
+    const event = JSON.parse(fs.readFileSync(eventPath, "utf8")) as {
+      pull_request?: { number?: number };
+    };
+    const n = event.pull_request?.number;
+    if (typeof n === "number" && Number.isInteger(n) && n > 0) {
+      return n;
+    }
+  } catch {
+    // ignore malformed event path
+  }
+  return undefined;
+}
+
 async function runWorkflowA(): Promise<void> {
   const version = core.getInput("ledgerful-version", { required: true });
   const checksum = core.getInput("ledgerful-checksum", { required: true });
@@ -97,6 +118,15 @@ async function runWorkflowA(): Promise<void> {
     outputPath: reportPath,
     cwd,
   });
+
+  // Engine does not emit prNumber; stamp it from the trusted pull_request event
+  // so Workflow B can resolve fork PRs without listPullRequestsAssociatedWithCommit.
+  const prNumber = resolvePrNumberFromEvent();
+  if (prNumber !== undefined) {
+    report.prNumber = prNumber;
+    fs.writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
+    core.info(`Stamped report.prNumber=${String(prNumber)} for Workflow B`);
+  }
 
   if (report.changeCount === 0) {
     core.info("No changes detected in PR scan.");
@@ -148,8 +178,10 @@ async function runWorkflowB(): Promise<void> {
   const reportPath = resolveReportPath();
 
   const raw = fs.readFileSync(reportPath, "utf8");
-  const report: PrScanReport = JSON.parse(raw) as PrScanReport;
-  assertSchemaVersion(report);
+  const parsed: unknown = JSON.parse(raw);
+  // Fail closed: full runtime schema check (not a TypeScript cast).
+  validateReport(parsed);
+  const report: PrScanReport = parsed;
 
   await postSummary({
     token,

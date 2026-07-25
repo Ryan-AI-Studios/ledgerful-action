@@ -28,10 +28,12 @@ interface PullRequestPayload {
   head?: { sha?: string };
 }
 
-interface GitHubPayload {
+export interface GitHubPayload {
   workflow_run?: WorkflowRunPayload;
   pull_request?: PullRequestPayload;
 }
+
+type Octokit = ReturnType<typeof github.getOctokit>;
 
 export async function postSummary(context: PostContext): Promise<void> {
   const { token, report, reportPath, artifactUrl, checkRunName } = context;
@@ -47,13 +49,12 @@ export async function postSummary(context: PostContext): Promise<void> {
   const { repo, payload } = github.context;
 
   const typedPayload = payload as GitHubPayload;
-  const pullRequestNumber = getPullRequestNumber(typedPayload);
-  if (!pullRequestNumber) {
-    throw new Error(
-      "Could not determine pull request number from workflow_run payload. " +
-        "Ensure Workflow B is triggered by a pull_request Workflow A.",
-    );
-  }
+  const pullRequestNumber = await resolvePullRequestNumber(
+    report,
+    typedPayload,
+    octokit,
+    repo,
+  );
 
   const body = renderSummary(report, artifactUrl);
   await upsertComment(octokit, repo, pullRequestNumber, body);
@@ -73,19 +74,103 @@ export async function postSummary(context: PostContext): Promise<void> {
   }
 }
 
-function getPullRequestNumber(payload: GitHubPayload): number | undefined {
+/**
+ * Resolve the PR number for Workflow B posting.
+ *
+ * Priority:
+ * 1. `report.prNumber` (set by Workflow A from trusted pull_request event) — primary.
+ * 2. `workflow_run.pull_requests[0]` / `pull_request.number` (same-repo PRs).
+ * 3. `listPullRequestsAssociatedWithCommit` by head_sha (fork PRs, older reports).
+ */
+export async function resolvePullRequestNumber(
+  report: PrScanReport,
+  payload: GitHubPayload,
+  octokit: Octokit,
+  repo: { owner: string; repo: string },
+): Promise<number> {
+  if (
+    typeof report.prNumber === "number" &&
+    Number.isInteger(report.prNumber) &&
+    report.prNumber > 0
+  ) {
+    return report.prNumber;
+  }
+
+  const fromPayload = getPullRequestNumberFromPayload(payload);
+  if (fromPayload !== undefined) {
+    return fromPayload;
+  }
+
+  const headSha = payload.workflow_run?.head_sha;
+  if (headSha) {
+    const fromApi = await resolvePrNumberFromCommit(
+      octokit,
+      repo,
+      headSha,
+    );
+    if (fromApi !== undefined) {
+      return fromApi;
+    }
+  }
+
+  throw new Error(
+    "Could not determine pull request number from workflow_run payload. " +
+      "Ensure Workflow B is triggered by a pull_request Workflow A.",
+  );
+}
+
+/** Synchronous payload-only resolution (no API). Exported for tests. */
+export function getPullRequestNumberFromPayload(
+  payload: GitHubPayload,
+): number | undefined {
   const first = payload.workflow_run?.pull_requests?.[0];
-  if (first && typeof first.number === "number") {
+  if (first && typeof first.number === "number" && first.number > 0) {
     return first.number;
   }
-  if (typeof payload.pull_request?.number === "number") {
+  if (
+    typeof payload.pull_request?.number === "number" &&
+    payload.pull_request.number > 0
+  ) {
     return payload.pull_request.number;
   }
   return undefined;
 }
 
+async function resolvePrNumberFromCommit(
+  octokit: Octokit,
+  repo: { owner: string; repo: string },
+  headSha: string,
+): Promise<number | undefined> {
+  const { data: prs } = await octokit.rest.repos.listPullRequestsAssociatedWithCommit({
+    owner: repo.owner,
+    repo: repo.repo,
+    commit_sha: headSha,
+  });
+
+  if (!Array.isArray(prs) || prs.length === 0) {
+    return undefined;
+  }
+
+  type AssociatedPr = (typeof prs)[number];
+  // Plan/DoD: only open PRs — never guess a closed PR for a legacy report.
+  const openExact = prs.filter(
+    (pr: AssociatedPr) => pr.state === "open" && pr.head.sha === headSha,
+  );
+  if (openExact.length >= 1) {
+    // Prefer open PRs with exact head SHA match (first if multiple).
+    return openExact[0].number;
+  }
+
+  const openAny = prs.find((pr: AssociatedPr) => pr.state === "open");
+  if (openAny) {
+    return openAny.number;
+  }
+
+  return undefined;
+}
+
 async function resolveHeadSha(
-  octokit: ReturnType<typeof github.getOctokit>,
+  octokit: Octokit,
   repo: { owner: string; repo: string },
   payload: GitHubPayload,
   pullRequestNumber: number,
@@ -104,7 +189,7 @@ async function resolveHeadSha(
 }
 
 async function upsertComment(
-  octokit: ReturnType<typeof github.getOctokit>,
+  octokit: Octokit,
   repo: { owner: string; repo: string },
   pullRequestNumber: number,
   body: string,
@@ -149,7 +234,7 @@ function riskLevelConclusion(
 }
 
 async function upsertCheckRun(
-  octokit: ReturnType<typeof github.getOctokit>,
+  octokit: Octokit,
   repo: { owner: string; repo: string },
   headSha: string,
   checkRunName: string,
@@ -164,6 +249,7 @@ async function upsertCheckRun(
   const existing = existingRuns.check_runs.at(0);
 
   const summary = renderCheckRunSummary(report);
+  // Raw dump: HTML-escape only — do NOT strip bidi (byte-content-preserving for inspection).
   const text = fs.existsSync(reportPath)
     ? `<details><summary>Raw PR scan report</summary>\n\n\`\`\`json\n${escapeHtml(fs.readFileSync(reportPath, "utf8").replace(/`/g, "\\`"))}\n\`\`\`\n</details>`
     : "Raw report not available.";

@@ -44,6 +44,25 @@ describe("renderSummary", () => {
     expect(body).not.toContain("abc123;rm -rf /");
   });
 
+  it("strips bidi controls from paths in the rendered body", () => {
+    const report: PrScanReport = {
+      ...sampleReport,
+      changeCount: 1,
+      changes: [
+        {
+          path: "src/\u202eevil.ts",
+          changeType: "modified",
+        },
+      ],
+      riskReasons: ["reason\u061Cspoof"],
+    };
+    const body = renderSummary(report);
+    expect(body).not.toContain("\u202e");
+    expect(body).not.toContain("\u061C");
+    expect(body).toContain("src/evil\\.ts");
+    expect(body).toContain("reasonspoof");
+  });
+
   it("truncates long file lists", () => {
     const report: PrScanReport = {
       ...sampleReport,

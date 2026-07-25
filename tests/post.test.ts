@@ -5,7 +5,15 @@ import type { PrScanReport } from "../src/schema.js";
 
 const sampleReport = sample as unknown as PrScanReport;
 
-function createOctokit(comments: { id: number; body?: string }[] = [], checkRuns: { id: number }[] = []) {
+function createOctokit(
+  comments: { id: number; body?: string }[] = [],
+  checkRuns: { id: number }[] = [],
+  associatedPrs: Array<{
+    number: number;
+    state: string;
+    head?: { sha?: string };
+  }> = [],
+) {
   const rest = {
     issues: {
       listComments: vi.fn().mockResolvedValue({ data: comments }),
@@ -20,6 +28,11 @@ function createOctokit(comments: { id: number; body?: string }[] = [], checkRuns
     pulls: {
       get: vi.fn().mockResolvedValue({
         data: { head: { sha: "head-sha-abc" } },
+      }),
+    },
+    repos: {
+      listPullRequestsAssociatedWithCommit: vi.fn().mockResolvedValue({
+        data: associatedPrs,
       }),
     },
   };
@@ -48,6 +61,14 @@ const github = await import("@actions/github");
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Restore default payload used by most tests
+  github.context.payload = {
+    workflow_run: {
+      id: 42,
+      pull_requests: [{ number: 7 }],
+      head_sha: "head-sha-abc",
+    },
+  };
 });
 
 describe("postSummary", () => {
@@ -116,12 +137,17 @@ describe("postSummary", () => {
     ).rejects.toThrow(/GITHUB_TOKEN/);
   });
 
-  it("throws when PR number is missing", async () => {
-    vi.mocked(github.getOctokit).mockReturnValue(
-      createOctokit() as unknown as ReturnType<typeof github.getOctokit>,
-    );
-    const previous = github.context.payload;
-    github.context.payload = {};
+  it("throws when PR number is missing and API fallback returns nothing", async () => {
+    const octokit = createOctokit([], [], []) as unknown as ReturnType<
+      typeof github.getOctokit
+    >;
+    vi.mocked(github.getOctokit).mockReturnValue(octokit);
+    github.context.payload = {
+      workflow_run: {
+        head_sha: "head-sha-abc",
+        pull_requests: [],
+      },
+    };
     await expect(
       postSummary({
         token: "token",
@@ -130,6 +156,190 @@ describe("postSummary", () => {
         checkRunName: "Ledgerful PR Risk Report",
       }),
     ).rejects.toThrow(/pull request number/);
-    github.context.payload = previous;
+    expect(
+      octokit.rest.repos.listPullRequestsAssociatedWithCommit,
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({
+        owner: "test-org",
+        repo: "test-repo",
+        commit_sha: "head-sha-abc",
+      }),
+    );
+  });
+
+  it("uses report.prNumber as primary path without calling the commit API", async () => {
+    const octokit = createOctokit([], []) as unknown as ReturnType<typeof github.getOctokit>;
+    vi.mocked(github.getOctokit).mockReturnValue(octokit);
+    // No PR in payload (fork PR case)
+    github.context.payload = {
+      workflow_run: {
+        head_sha: "head-sha-abc",
+        pull_requests: [],
+      },
+    };
+
+    const reportWithPr: PrScanReport = {
+      ...sampleReport,
+      prNumber: 123,
+    };
+
+    await postSummary({
+      token: "token",
+      report: reportWithPr,
+      reportPath: "ledgerful-pr-report.json",
+      checkRunName: "Ledgerful PR Risk Report",
+    });
+
+    expect(octokit.rest.issues.createComment).toHaveBeenCalledWith(
+      expect.objectContaining({ issue_number: 123 }),
+    );
+    expect(
+      octokit.rest.repos.listPullRequestsAssociatedWithCommit,
+    ).not.toHaveBeenCalled();
+  });
+
+  it("falls back to listPullRequestsAssociatedWithCommit when prNumber absent and pull_requests empty", async () => {
+    const octokit = createOctokit(
+      [],
+      [],
+      [
+        {
+          number: 55,
+          state: "open",
+          head: { sha: "head-sha-abc" },
+        },
+      ],
+    ) as unknown as ReturnType<typeof github.getOctokit>;
+    vi.mocked(github.getOctokit).mockReturnValue(octokit);
+    github.context.payload = {
+      workflow_run: {
+        head_sha: "head-sha-abc",
+        pull_requests: [],
+      },
+    };
+
+    await postSummary({
+      token: "token",
+      report: sampleReport,
+      reportPath: "ledgerful-pr-report.json",
+      checkRunName: "Ledgerful PR Risk Report",
+    });
+
+    expect(
+      octokit.rest.repos.listPullRequestsAssociatedWithCommit,
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({
+        commit_sha: "head-sha-abc",
+      }),
+    );
+    expect(octokit.rest.issues.createComment).toHaveBeenCalledWith(
+      expect.objectContaining({ issue_number: 55 }),
+    );
+  });
+
+  it("prefers open PR with exact head.sha when multiple PRs are associated", async () => {
+    const octokit = createOctokit(
+      [],
+      [],
+      [
+        {
+          number: 10,
+          state: "closed",
+          head: { sha: "head-sha-abc" },
+        },
+        {
+          number: 20,
+          state: "open",
+          head: { sha: "other-sha" },
+        },
+        {
+          number: 30,
+          state: "open",
+          head: { sha: "head-sha-abc" },
+        },
+        {
+          number: 40,
+          state: "open",
+          head: { sha: "head-sha-abc" },
+        },
+      ],
+    ) as unknown as ReturnType<typeof github.getOctokit>;
+    vi.mocked(github.getOctokit).mockReturnValue(octokit);
+    github.context.payload = {
+      workflow_run: {
+        head_sha: "head-sha-abc",
+        pull_requests: [],
+      },
+    };
+
+    await postSummary({
+      token: "token",
+      report: sampleReport,
+      reportPath: "ledgerful-pr-report.json",
+      checkRunName: "Ledgerful PR Risk Report",
+    });
+
+    // First open + exact head.sha match wins (PR 30, not closed 10 or open-other-sha 20).
+    expect(octokit.rest.issues.createComment).toHaveBeenCalledWith(
+      expect.objectContaining({ issue_number: 30 }),
+    );
+  });
+
+  it("does not select a closed PR when only closed associations exist", async () => {
+    const octokit = createOctokit(
+      [],
+      [],
+      [
+        {
+          number: 10,
+          state: "closed",
+          head: { sha: "head-sha-abc" },
+        },
+        {
+          number: 11,
+          state: "closed",
+          head: { sha: "other-sha" },
+        },
+      ],
+    ) as unknown as ReturnType<typeof github.getOctokit>;
+    vi.mocked(github.getOctokit).mockReturnValue(octokit);
+    github.context.payload = {
+      workflow_run: {
+        head_sha: "head-sha-abc",
+        pull_requests: [],
+      },
+    };
+
+    await expect(
+      postSummary({
+        token: "token",
+        report: sampleReport,
+        reportPath: "ledgerful-pr-report.json",
+        checkRunName: "Ledgerful PR Risk Report",
+      }),
+    ).rejects.toThrow(/pull request number/);
+    expect(octokit.rest.issues.createComment).not.toHaveBeenCalled();
+  });
+
+  it("throws a clear error when commit association list is empty", async () => {
+    const octokit = createOctokit([], [], []) as unknown as ReturnType<
+      typeof github.getOctokit
+    >;
+    vi.mocked(github.getOctokit).mockReturnValue(octokit);
+    github.context.payload = {
+      workflow_run: {
+        head_sha: "head-sha-abc",
+        pull_requests: [],
+      },
+    };
+
+    await expect(
+      postSummary({
+        token: "token",
+        report: sampleReport,
+        reportPath: "ledgerful-pr-report.json",
+        checkRunName: "Ledgerful PR Risk Report",
+      }),
+    ).rejects.toThrow(/Could not determine pull request number/);
   });
 });

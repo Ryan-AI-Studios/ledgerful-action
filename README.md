@@ -85,11 +85,16 @@ on:
     types: [completed]
 
 permissions:
+  # actions:read is required to download artifacts from another workflow run
+  # (Workflow A) when using a restricted GITHUB_TOKEN + github-token input.
+  actions: read
   pull-requests: write
   checks: write
 
 jobs:
   post:
+    # Do not post if Workflow A failed after uploading (or never completed successfully).
+    if: github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
       - name: Download the PR scan artifact

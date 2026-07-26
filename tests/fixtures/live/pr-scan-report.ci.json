@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-07-26T19:55:55.796133345+00:00",
+  "baseRef": "d9ac7167f3e23ee31ebbc0e9865a8bcca7e5d461",
+  "headRef": "5a04961cf55c221642346adc98d11b9bab0f69b4",
+  "headHash": "e64fc7a0de8b1ea6397922c3830776ae378042e1",
+  "branchName": null,
+  "treeClean": false,
+  "changeCount": 1,
+  "changes": [
+    {
+      "path": "src/commands/web/server/router.rs",
+      "changeType": "modified"
+    }
+  ],
+  "riskLevel": "low",
+  "riskReasons": [],
+  "analysisWarnings": []
+}

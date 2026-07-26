@@ -9,6 +9,12 @@ import {
   renderCheckRunTitle,
   renderSummary,
 } from "./render.js";
+import {
+  CHECK_RUN_MAX_BYTES,
+  CHECK_RUN_TRUNCATION_MARKER,
+  truncateToUtf8Bytes,
+  utf8ByteLength,
+} from "./truncate.js";
 
 export interface PostContext {
   token: string;
@@ -233,6 +239,46 @@ function riskLevelConclusion(
   }
 }
 
+/**
+ * Build check-run `output.text` with a balanced `<details>` + JSON fence.
+ * Truncates **inner** JSON content first so the wrapper always closes cleanly;
+ * entire payload is kept under CHECK_RUN_MAX_BYTES (UTF-8).
+ */
+export function buildCheckRunRawText(rawJson: string | null): string {
+  if (rawJson === null) {
+    return truncateToUtf8Bytes(
+      "Raw report not available.",
+      CHECK_RUN_MAX_BYTES,
+      CHECK_RUN_TRUNCATION_MARKER,
+    );
+  }
+
+  // Raw dump: HTML-escape only — do NOT strip bidi (byte-content-preserving for inspection).
+  const escaped = escapeHtml(rawJson.replace(/`/g, "\\`"));
+  const open = `<details><summary>Raw PR scan report</summary>\n\n\`\`\`json\n`;
+  const close = `\n\`\`\`\n</details>`;
+  const overhead = utf8ByteLength(open) + utf8ByteLength(close);
+  const maxInner = Math.max(0, CHECK_RUN_MAX_BYTES - overhead);
+  const inner = truncateToUtf8Bytes(
+    escaped,
+    maxInner,
+    CHECK_RUN_TRUNCATION_MARKER,
+  );
+  const text = `${open}${inner}${close}`;
+
+  // Safety net: if still over budget, shrink inner further (should be rare).
+  if (utf8ByteLength(text) > CHECK_RUN_MAX_BYTES) {
+    const tighter = Math.max(0, maxInner - 64);
+    const inner2 = truncateToUtf8Bytes(
+      escaped,
+      tighter,
+      CHECK_RUN_TRUNCATION_MARKER,
+    );
+    return `${open}${inner2}${close}`;
+  }
+  return text;
+}
+
 async function upsertCheckRun(
   octokit: Octokit,
   repo: { owner: string; repo: string },
@@ -249,10 +295,9 @@ async function upsertCheckRun(
   const existing = existingRuns.check_runs.at(0);
 
   const summary = renderCheckRunSummary(report);
-  // Raw dump: HTML-escape only — do NOT strip bidi (byte-content-preserving for inspection).
   const text = fs.existsSync(reportPath)
-    ? `<details><summary>Raw PR scan report</summary>\n\n\`\`\`json\n${escapeHtml(fs.readFileSync(reportPath, "utf8").replace(/`/g, "\\`"))}\n\`\`\`\n</details>`
-    : "Raw report not available.";
+    ? buildCheckRunRawText(fs.readFileSync(reportPath, "utf8"))
+    : buildCheckRunRawText(null);
 
   const params = {
     ...repo,

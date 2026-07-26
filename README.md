@@ -176,7 +176,8 @@ snippet above already sets it. Do not remove it.
 
 ## Output schema
 
-`ledgerful scan --pr <base>...<head> --format json` emits a **versioned, deterministic** report:
+`ledgerful scan --pr <base>...<head> --format json` emits a **versioned, deterministic** report.
+This Action accepts **`schemaVersion` 1 or 2** (mixed Workflow A/B rollouts during engine upgrades).
 
 ```json
 {
@@ -195,8 +196,17 @@ snippet above already sets it. Do not remove it.
 }
 ```
 
-Breaking changes bump `schemaVersion`; the Action pins a version. Deterministic for a given diff +
-pinned engine version.
+- **`headHash` / `branchName`:** optional. On detached HEAD (typical `pull_request` checkout) the engine
+  may omit them or historically emit `null`; the Action accepts string, `null`, or absent and never
+  prints the word `null` into comments.
+- **`analysisWarnings`:** reserved (engine currently always emits `[]`); not a live signal.
+- **Schema v2 (optional fields):** per change — `oldPath`, `churn`, `lastCommitAt`, `isSensitive`;
+  report-level — `historyWindowCommits`, `historyTruncated`. When present, the PR comment may include
+  a size-capped “Most-churned files” section. Comment bodies and check-run text are bounded under
+  GitHub’s API limits (char/byte guards with an explicit truncation marker).
+
+Breaking schema changes bump `schemaVersion`; this Action accepts 1 and 2. Deterministic for a given
+diff + pinned engine version.
 
 ## Security posture
 

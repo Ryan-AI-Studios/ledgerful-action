@@ -4,6 +4,7 @@ import {
   PR_SCAN_SCHEMA_VERSIONS,
   assertSchemaVersion,
   displayBranchName,
+  optionalString,
   validateReport,
   type PrScanReport,
 } from "../src/schema.js";
@@ -104,15 +105,18 @@ describe("validateReport", () => {
     }).not.toThrow();
   });
 
-  it("accepts headHash/branchName null (consumers use optionalString)", () => {
+  it("accepts headHash/branchName null and normalizes to undefined", () => {
     const report = validReport({ headHash: null, branchName: null });
     expect(() => {
       validateReport(report);
     }).not.toThrow();
     const r = report as { headHash: unknown; branchName: unknown };
-    // Runtime may still hold null; optionalString normalizes for display.
-    expect(r.headHash === null || r.headHash === undefined).toBe(true);
-    expect(r.branchName === null || r.branchName === undefined).toBe(true);
+    expect(r.headHash).toBeUndefined();
+    expect(r.branchName).toBeUndefined();
+    expect(optionalString(r.branchName as string | null | undefined)).toBeUndefined();
+    expect(displayBranchName(r.branchName as string | null | undefined)).toBe(
+      "detached HEAD",
+    );
   });
 
   it("rejects wrong types for headHash/branchName (fail closed)", () => {

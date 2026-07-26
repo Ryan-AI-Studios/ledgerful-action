@@ -49,13 +49,14 @@ export interface PrScanReport {
   baseRef: string;
   headRef: string;
   /**
-   * Optional — engine may omit or null on edge cases.
-   * Use `typeof x === "string" ? x : undefined` when consuming.
+   * Optional — engine may omit (or historically emit null on edge cases).
+   * `validateReport` normalizes null → absent so consumers never see null.
    */
   headHash?: string;
   /**
-   * Optional — null on detached HEAD (CI pull_request checkout).
-   * Use `typeof x === "string" ? x : undefined` when consuming.
+   * Optional — omitted/null on detached HEAD (CI pull_request checkout).
+   * `validateReport` normalizes null → absent so consumers never see null.
+   * Use `displayBranchName()` for a neutral UI label.
    */
   branchName?: string;
   treeClean: boolean;
@@ -64,8 +65,8 @@ export interface PrScanReport {
   riskLevel: RiskLevel;
   riskReasons: string[];
   /**
-   * Reserved — engine currently emits empty; do not treat as a live signal.
-   * Still validated as a string array when present for forward/backward compat.
+   * Reserved — engine currently always emits `[]`; do not treat as a live signal.
+   * Required for compat with current engine JSON (missing key fails closed).
    */
   analysisWarnings: string[];
   /** Set by Workflow A from pull_request.number; optional for older reports. */
@@ -130,9 +131,11 @@ export function validateReport(value: unknown): asserts value is PrScanReport {
   assertNonEmptyString(obj, "baseRef");
   assertNonEmptyString(obj, "headRef");
   // Detached HEAD / optional hash: string | null | absent. Reject wrong types & empty.
-  // Leave null/absent as-is; consumers use optionalString() / displayBranchName().
+  // Normalize null → delete so typed consumers never observe null at runtime.
   assertOptionalNonEmptyString(obj, "headHash");
   assertOptionalNonEmptyString(obj, "branchName");
+  normalizeNullOptionalString(obj, "headHash");
+  normalizeNullOptionalString(obj, "branchName");
 
   if (typeof obj.treeClean !== "boolean") {
     throw new Error("Invalid PR scan report: treeClean must be a boolean.");
@@ -283,8 +286,7 @@ function assertNonEmptyString(
 
 /**
  * Accept string | null | absent. Reject wrong types, empty string, oversized.
- * Does not mutate null → undefined (fixtures/shared objects stay intact);
- * consumers normalize via optionalString() / displayBranchName().
+ * Call normalizeNullOptionalString afterwards to drop null keys.
  */
 function assertOptionalNonEmptyString(
   obj: Record<string, unknown>,
@@ -302,6 +304,16 @@ function assertOptionalNonEmptyString(
     throw new Error(
       `Invalid PR scan report: ${field} must be a non-empty string within length limits when present.`,
     );
+  }
+}
+
+/** Drop null optional string keys so runtime matches `string | undefined` types. */
+function normalizeNullOptionalString(
+  obj: Record<string, unknown>,
+  field: "headHash" | "branchName",
+): void {
+  if (obj[field] === null) {
+    obj[field] = undefined;
   }
 }
 

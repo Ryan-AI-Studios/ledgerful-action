@@ -1,15 +1,36 @@
-export const PR_SCAN_SCHEMA_VERSION = 1 as const;
+/**
+ * Latest known PR scan schema version (engine may emit 1 or 2 during rollout).
+ * Prefer PR_SCAN_SCHEMA_VERSIONS for acceptance checks.
+ */
+export const PR_SCAN_SCHEMA_VERSION = 2 as const;
+
+/** Accepted schema versions — v1 remains valid for mixed Workflow A/B rollout. */
+export const PR_SCAN_SCHEMA_VERSIONS: ReadonlySet<number> = new Set([1, 2]);
+
+const SCHEMA_VERSION_ERROR =
+  "Unsupported or missing schemaVersion. This Action accepts schemaVersion 1 or 2.";
 
 /** Generous caps for untrusted report fields (fail closed on hostile payloads). */
 const MAX_STRING_LENGTH = 4096;
 const MAX_CHANGES = 10_000;
 const MAX_STRING_ARRAY = 200;
 
+/** Soft ISO-8601 shape: YYYY-MM-DDT… (engine emits full timestamps). */
+const SOFT_ISO8601_RE = /^\d{4}-\d{2}-\d{2}T/;
+
 export type ChangeType = "added" | "modified" | "deleted" | "renamed";
 
 export interface PrScanChange {
   path: string;
   changeType: ChangeType;
+  /** Prior path on renames (schema v2; optional). */
+  oldPath?: string;
+  /** Commits touching this path inside the history window (schema v2; optional). */
+  churn?: number;
+  /** ISO-8601 last-commit time within the window (schema v2; optional). */
+  lastCommitAt?: string;
+  /** True when path matches sensitive patterns (schema v2; optional). */
+  isSensitive?: boolean;
 }
 
 export type RiskLevel = "low" | "medium" | "high";
@@ -27,24 +48,62 @@ export interface PrScanReport {
   generatedAt: string;
   baseRef: string;
   headRef: string;
-  headHash: string;
-  branchName: string;
+  /**
+   * Optional — engine may omit or null on edge cases.
+   * Use `typeof x === "string" ? x : undefined` when consuming.
+   */
+  headHash?: string;
+  /**
+   * Optional — null on detached HEAD (CI pull_request checkout).
+   * Use `typeof x === "string" ? x : undefined` when consuming.
+   */
+  branchName?: string;
   treeClean: boolean;
   changeCount: number;
   changes: PrScanChange[];
   riskLevel: RiskLevel;
   riskReasons: string[];
+  /**
+   * Reserved — engine currently emits empty; do not treat as a live signal.
+   * Still validated as a string array when present for forward/backward compat.
+   */
   analysisWarnings: string[];
   /** Set by Workflow A from pull_request.number; optional for older reports. */
   prNumber?: number;
+  /** First-parent history window size used for churn/recency (schema v2; optional). */
+  historyWindowCommits?: number;
+  /** True when the history walk hit its commit bound (schema v2; optional). */
+  historyTruncated?: boolean;
+}
+
+/**
+ * Display form for branchName: never the string "null".
+ * Unknown / null / empty → neutral placeholder for detached HEAD.
+ */
+export function displayBranchName(branchName: string | null | undefined): string {
+  if (typeof branchName === "string" && branchName.length > 0) {
+    return branchName;
+  }
+  return "detached HEAD";
+}
+
+/**
+ * Normalize optional string-or-null fields after validation.
+ * Consumers should still prefer `typeof x === "string" ? x : undefined`.
+ */
+export function optionalString(
+  value: string | null | undefined,
+): string | undefined {
+  return typeof value === "string" ? value : undefined;
 }
 
 export function assertSchemaVersion(report: PrScanReport): void {
-  if (report.schemaVersion !== PR_SCAN_SCHEMA_VERSION) {
-    // Neutral: never interpolate report content (even numeric) into errors.
-    throw new Error(
-      `Unsupported or missing schemaVersion. This Action pins schemaVersion ${String(PR_SCAN_SCHEMA_VERSION)}.`,
-    );
+  if (
+    typeof report.schemaVersion !== "number" ||
+    !PR_SCAN_SCHEMA_VERSIONS.has(report.schemaVersion)
+  ) {
+    // Neutral: never interpolate report content into errors.
+    throw new Error(SCHEMA_VERSION_ERROR);
   }
 }
 
@@ -59,18 +118,21 @@ export function validateReport(value: unknown): asserts value is PrScanReport {
 
   const obj = value as Record<string, unknown>;
 
-  if (obj.schemaVersion !== PR_SCAN_SCHEMA_VERSION) {
+  if (
+    typeof obj.schemaVersion !== "number" ||
+    !PR_SCAN_SCHEMA_VERSIONS.has(obj.schemaVersion)
+  ) {
     // Neutral: never interpolate untrusted schemaVersion into the error message.
-    throw new Error(
-      `Unsupported or missing schemaVersion. This Action pins schemaVersion ${String(PR_SCAN_SCHEMA_VERSION)}.`,
-    );
+    throw new Error(SCHEMA_VERSION_ERROR);
   }
 
   assertNonEmptyString(obj, "generatedAt");
   assertNonEmptyString(obj, "baseRef");
   assertNonEmptyString(obj, "headRef");
-  assertNonEmptyString(obj, "headHash");
-  assertNonEmptyString(obj, "branchName");
+  // Detached HEAD / optional hash: string | null | absent. Reject wrong types & empty.
+  // Leave null/absent as-is; consumers use optionalString() / displayBranchName().
+  assertOptionalNonEmptyString(obj, "headHash");
+  assertOptionalNonEmptyString(obj, "branchName");
 
   if (typeof obj.treeClean !== "boolean") {
     throw new Error("Invalid PR scan report: treeClean must be a boolean.");
@@ -121,9 +183,12 @@ export function validateReport(value: unknown): asserts value is PrScanReport {
         "Invalid PR scan report: each change.changeType must be added, modified, deleted, or renamed.",
       );
     }
+    // Optional v2 per-change fields — independently validated when present.
+    validateOptionalChangeFields(change);
   }
 
   assertStringArray(obj, "riskReasons");
+  // Reserved field (engine currently emits empty) — still validated for compat.
   assertStringArray(obj, "analysisWarnings");
 
   if (obj.prNumber !== undefined) {
@@ -135,6 +200,66 @@ export function validateReport(value: unknown): asserts value is PrScanReport {
     ) {
       throw new Error(
         "Invalid PR scan report: prNumber must be a positive integer when present.",
+      );
+    }
+  }
+
+  // Optional report-level v2 history fields.
+  if (obj.historyWindowCommits !== undefined) {
+    assertNonNegativeInteger(obj, "historyWindowCommits");
+  }
+  if (obj.historyTruncated !== undefined) {
+    if (typeof obj.historyTruncated !== "boolean") {
+      throw new Error(
+        "Invalid PR scan report: historyTruncated must be a boolean when present.",
+      );
+    }
+  }
+}
+
+function validateOptionalChangeFields(change: Record<string, unknown>): void {
+  if (change.oldPath !== undefined) {
+    if (
+      typeof change.oldPath !== "string" ||
+      change.oldPath.length === 0 ||
+      change.oldPath.length > MAX_STRING_LENGTH
+    ) {
+      throw new Error(
+        "Invalid PR scan report: change.oldPath must be a non-empty string within length limits when present.",
+      );
+    }
+  }
+
+  if (change.churn !== undefined) {
+    if (
+      typeof change.churn !== "number" ||
+      !Number.isFinite(change.churn) ||
+      !Number.isInteger(change.churn) ||
+      change.churn < 0
+    ) {
+      throw new Error(
+        "Invalid PR scan report: change.churn must be a non-negative integer when present.",
+      );
+    }
+  }
+
+  if (change.lastCommitAt !== undefined) {
+    if (
+      typeof change.lastCommitAt !== "string" ||
+      change.lastCommitAt.length === 0 ||
+      change.lastCommitAt.length > MAX_STRING_LENGTH ||
+      !SOFT_ISO8601_RE.test(change.lastCommitAt)
+    ) {
+      throw new Error(
+        "Invalid PR scan report: change.lastCommitAt must be a non-empty ISO-8601-like string when present.",
+      );
+    }
+  }
+
+  if (change.isSensitive !== undefined) {
+    if (typeof change.isSensitive !== "boolean") {
+      throw new Error(
+        "Invalid PR scan report: change.isSensitive must be a boolean when present.",
       );
     }
   }
@@ -152,6 +277,47 @@ function assertNonEmptyString(
   ) {
     throw new Error(
       `Invalid PR scan report: ${field} must be a non-empty string within length limits.`,
+    );
+  }
+}
+
+/**
+ * Accept string | null | absent. Reject wrong types, empty string, oversized.
+ * Does not mutate null → undefined (fixtures/shared objects stay intact);
+ * consumers normalize via optionalString() / displayBranchName().
+ */
+function assertOptionalNonEmptyString(
+  obj: Record<string, unknown>,
+  field: string,
+): void {
+  const value = obj[field];
+  if (value === undefined || value === null) {
+    return;
+  }
+  if (
+    typeof value !== "string" ||
+    value.length === 0 ||
+    value.length > MAX_STRING_LENGTH
+  ) {
+    throw new Error(
+      `Invalid PR scan report: ${field} must be a non-empty string within length limits when present.`,
+    );
+  }
+}
+
+function assertNonNegativeInteger(
+  obj: Record<string, unknown>,
+  field: string,
+): void {
+  const value = obj[field];
+  if (
+    typeof value !== "number" ||
+    !Number.isFinite(value) ||
+    !Number.isInteger(value) ||
+    value < 0
+  ) {
+    throw new Error(
+      `Invalid PR scan report: ${field} must be a non-negative integer when present.`,
     );
   }
 }

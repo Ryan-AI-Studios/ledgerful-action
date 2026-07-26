@@ -1,13 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
   PR_SCAN_SCHEMA_VERSION,
+  PR_SCAN_SCHEMA_VERSIONS,
   assertSchemaVersion,
+  displayBranchName,
   validateReport,
   type PrScanReport,
 } from "../src/schema.js";
 import sample from "./fixtures/pr-scan-report.sample.json";
+import liveCi from "./fixtures/live/pr-scan-report.ci.json";
 
 const sampleReport = sample as unknown as PrScanReport;
+const SCHEMA_VERSION_ERROR =
+  "Unsupported or missing schemaVersion. This Action accepts schemaVersion 1 or 2.";
 
 function validReport(overrides: Record<string, unknown> = {}): unknown {
   return {
@@ -28,21 +33,45 @@ function validReport(overrides: Record<string, unknown> = {}): unknown {
 }
 
 describe("schema", () => {
-  it("pins schemaVersion to 1", () => {
-    expect(PR_SCAN_SCHEMA_VERSION).toBe(1);
+  it("pins latest schemaVersion to 2 and accepts 1 and 2", () => {
+    expect(PR_SCAN_SCHEMA_VERSION).toBe(2);
+    expect(PR_SCAN_SCHEMA_VERSIONS.has(1)).toBe(true);
+    expect(PR_SCAN_SCHEMA_VERSIONS.has(2)).toBe(true);
+    expect(PR_SCAN_SCHEMA_VERSIONS.has(3)).toBe(false);
   });
 
   it("accepts the sample fixture via assertSchemaVersion", () => {
-    expect(sampleReport.schemaVersion).toBe(PR_SCAN_SCHEMA_VERSION);
+    expect(sampleReport.schemaVersion).toBe(1);
     assertSchemaVersion(sampleReport);
+  });
+
+  it("accepts schemaVersion 2 via assertSchemaVersion", () => {
+    expect(() => {
+      assertSchemaVersion({ schemaVersion: 2 } as PrScanReport);
+    }).not.toThrow();
   });
 
   it("rejects an unsupported schema version via assertSchemaVersion with neutral message", () => {
     expect(() => {
-      assertSchemaVersion({ schemaVersion: 2 } as PrScanReport);
-    }).toThrow(
-      `Unsupported or missing schemaVersion. This Action pins schemaVersion ${String(PR_SCAN_SCHEMA_VERSION)}.`,
-    );
+      assertSchemaVersion({ schemaVersion: 3 } as PrScanReport);
+    }).toThrow(SCHEMA_VERSION_ERROR);
+  });
+});
+
+describe("displayBranchName", () => {
+  it("returns the branch when present", () => {
+    expect(displayBranchName("feature/x")).toBe("feature/x");
+  });
+
+  it("uses detached HEAD placeholder for null, undefined, and empty", () => {
+    expect(displayBranchName(null)).toBe("detached HEAD");
+    expect(displayBranchName(undefined)).toBe("detached HEAD");
+    expect(displayBranchName("")).toBe("detached HEAD");
+  });
+
+  it("never returns the string null", () => {
+    expect(displayBranchName(null)).not.toBe("null");
+    expect(displayBranchName(undefined)).not.toBe("null");
   });
 });
 
@@ -57,6 +86,149 @@ describe("validateReport", () => {
     expect(() => {
       validateReport(validReport());
     }).not.toThrow();
+  });
+
+  it("accepts the live CI fixture with branchName null (DoD-2)", () => {
+    expect(liveCi).toMatchObject({ branchName: null, schemaVersion: 1 });
+    expect(() => {
+      validateReport(structuredClone(liveCi));
+    }).not.toThrow();
+  });
+
+  it("accepts headHash/branchName absent", () => {
+    const report = validReport() as Record<string, unknown>;
+    delete report.headHash;
+    delete report.branchName;
+    expect(() => {
+      validateReport(report);
+    }).not.toThrow();
+  });
+
+  it("accepts headHash/branchName null (consumers use optionalString)", () => {
+    const report = validReport({ headHash: null, branchName: null });
+    expect(() => {
+      validateReport(report);
+    }).not.toThrow();
+    const r = report as { headHash: unknown; branchName: unknown };
+    // Runtime may still hold null; optionalString normalizes for display.
+    expect(r.headHash === null || r.headHash === undefined).toBe(true);
+    expect(r.branchName === null || r.branchName === undefined).toBe(true);
+  });
+
+  it("rejects wrong types for headHash/branchName (fail closed)", () => {
+    expect(() => {
+      validateReport(validReport({ headHash: 123 }));
+    }).toThrow(/headHash/);
+    expect(() => {
+      validateReport(validReport({ headHash: { a: 1 } }));
+    }).toThrow(/headHash/);
+    expect(() => {
+      validateReport(validReport({ headHash: ["x"] }));
+    }).toThrow(/headHash/);
+    expect(() => {
+      validateReport(validReport({ branchName: 0 }));
+    }).toThrow(/branchName/);
+    expect(() => {
+      validateReport(validReport({ branchName: { name: "x" } }));
+    }).toThrow(/branchName/);
+    expect(() => {
+      validateReport(validReport({ branchName: ["feature"] }));
+    }).toThrow(/branchName/);
+  });
+
+  it("rejects empty string headHash/branchName when present", () => {
+    expect(() => {
+      validateReport(validReport({ headHash: "" }));
+    }).toThrow(/headHash/);
+    expect(() => {
+      validateReport(validReport({ branchName: "" }));
+    }).toThrow(/branchName/);
+  });
+
+  it("accepts schemaVersion 2 reports", () => {
+    expect(() => {
+      validateReport(validReport({ schemaVersion: 2 }));
+    }).not.toThrow();
+  });
+
+  it("accepts v2 optional per-change and report-level fields", () => {
+    expect(() => {
+      validateReport(
+        validReport({
+          schemaVersion: 2,
+          historyWindowCommits: 1000,
+          historyTruncated: true,
+          changes: [
+            {
+              path: "src/new.ts",
+              changeType: "renamed",
+              oldPath: "src/old.ts",
+              churn: 12,
+              lastCommitAt: "2026-07-26T12:00:00Z",
+              isSensitive: true,
+            },
+          ],
+        }),
+      );
+    }).not.toThrow();
+  });
+
+  it("rejects invalid v2 optional fields when present", () => {
+    expect(() => {
+      validateReport(
+        validReport({
+          changes: [
+            { path: "a.ts", changeType: "modified", oldPath: "" },
+          ],
+        }),
+      );
+    }).toThrow(/oldPath/);
+    expect(() => {
+      validateReport(
+        validReport({
+          changes: [
+            { path: "a.ts", changeType: "modified", churn: -1 },
+          ],
+        }),
+      );
+    }).toThrow(/churn/);
+    expect(() => {
+      validateReport(
+        validReport({
+          changes: [
+            { path: "a.ts", changeType: "modified", churn: 1.5 },
+          ],
+        }),
+      );
+    }).toThrow(/churn/);
+    expect(() => {
+      validateReport(
+        validReport({
+          changes: [
+            {
+              path: "a.ts",
+              changeType: "modified",
+              lastCommitAt: "not-a-date",
+            },
+          ],
+        }),
+      );
+    }).toThrow(/lastCommitAt/);
+    expect(() => {
+      validateReport(
+        validReport({
+          changes: [
+            { path: "a.ts", changeType: "modified", isSensitive: "yes" },
+          ],
+        }),
+      );
+    }).toThrow(/isSensitive/);
+    expect(() => {
+      validateReport(validReport({ historyWindowCommits: -1 }));
+    }).toThrow(/historyWindowCommits/);
+    expect(() => {
+      validateReport(validReport({ historyTruncated: "true" }));
+    }).toThrow(/historyTruncated/);
   });
 
   it("rejects non-object, null, and array before property access", () => {
@@ -90,20 +262,12 @@ describe("validateReport", () => {
     const attacker = "attacker-payload-should-not-appear";
     expect(() => {
       validateReport(validReport({ schemaVersion: 99 }));
-    }).toThrow(
-      `Unsupported or missing schemaVersion. This Action pins schemaVersion ${String(PR_SCAN_SCHEMA_VERSION)}.`,
-    );
+    }).toThrow(SCHEMA_VERSION_ERROR);
     expect(() => {
-      validateReport(
-        validReport({ schemaVersion: attacker }),
-      );
-    }).toThrow(
-      `Unsupported or missing schemaVersion. This Action pins schemaVersion ${String(PR_SCAN_SCHEMA_VERSION)}.`,
-    );
+      validateReport(validReport({ schemaVersion: attacker }));
+    }).toThrow(SCHEMA_VERSION_ERROR);
     try {
-      validateReport(
-        validReport({ schemaVersion: attacker }),
-      );
+      validateReport(validReport({ schemaVersion: attacker }));
     } catch (err) {
       expect(String(err)).not.toContain(attacker);
     }

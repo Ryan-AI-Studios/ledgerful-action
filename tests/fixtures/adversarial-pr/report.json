@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "generatedAt": "2026-07-17T21:05:24.708717700+00:00",
   "baseRef": "main<!--inject-->",
   "headRef": "HEAD</script>",
@@ -8,11 +8,40 @@
   "treeClean": true,
   "changeCount": 5,
   "changes": [
-    { "path": "src/\u003cscript\u003ealert(1)\u003c/script\u003e.ts", "changeType": "added" },
-    { "path": "src/`rm -rf /`.ts", "changeType": "modified" },
-    { "path": "src/${IFS}env.ts", "changeType": "added" },
-    { "path": "src/<!-- ledgerful-action:pr-comment -->.md", "changeType": "added" },
-    { "path": "src/[bidi]\u202e\u202d.ts", "changeType": "renamed" }
+    {
+      "path": "src/\u003cscript\u003ealert(1)\u003c/script\u003e.ts",
+      "changeType": "added",
+      "churn": 3,
+      "lastCommitAt": "2026-07-17T21:05:24.708717700+00:00",
+      "isSensitive": false
+    },
+    {
+      "path": "src/`rm -rf /`.ts",
+      "changeType": "modified",
+      "churn": 1,
+      "lastCommitAt": "2026-07-17T21:05:24.708717700+00:00"
+    },
+    {
+      "path": "src/${IFS}env.ts",
+      "changeType": "added",
+      "churn": 9,
+      "isSensitive": true
+    },
+    {
+      "path": "src/<!-- ledgerful-action:pr-comment -->.md",
+      "changeType": "added",
+      "oldPath": "src/old\u202e\u202d.md",
+      "churn": 5,
+      "lastCommitAt": "2026-07-01T00:00:00Z"
+    },
+    {
+      "path": "src/[bidi]\u202e\u202d.ts",
+      "changeType": "renamed",
+      "oldPath": "src/evil\u003cscript\u003e.ts",
+      "churn": 12,
+      "lastCommitAt": "2026-06-01T00:00:00Z",
+      "isSensitive": true
+    }
   ],
   "riskLevel": "high",
   "riskReasons": [
@@ -22,5 +51,7 @@
     "[link](javascript:alert(1))",
     "\u003cscript\u003ealert(1)\u003c/script\u003e"
   ],
-  "analysisWarnings": ["[bidi]\u202e\u202d marker detected"]
+  "analysisWarnings": ["[bidi]\u202e\u202d marker detected"],
+  "historyWindowCommits": 1000,
+  "historyTruncated": true
 }

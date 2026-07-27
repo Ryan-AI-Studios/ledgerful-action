@@ -59,9 +59,9 @@ jobs:
         # https://github.com/Ryan-AI-Studios/ledgerful-action (main).
         uses: Ryan-AI-Studios/ledgerful-action@f900ead4d7a3d6d9162b393094492b5d5fe10578
         with:
-          ledgerful-version: v0.1.9
-          # checksum for ledgerful-x86_64-unknown-linux-gnu.tar.gz (v0.1.9); substitute for other OS/arch
-          ledgerful-checksum: ab203f8de80597dcd8294c3e87a2198113428c7a5d39cecaf8a37ce36f1a01ff
+          ledgerful-version: v0.2.1
+          # checksum for ledgerful-x86_64-unknown-linux-gnu.tar.gz (v0.2.1); substitute for other OS/arch
+          ledgerful-checksum: db8a26f4ffa44e46dd1094b8c028caf0966782c43c7d1e504acb55ca5238deda
         env:
           LEDGERFUL_NO_NETWORK: "1"   # assert the engine made no network call during the scan
 
@@ -125,7 +125,7 @@ jobs:
 
 | input | required | default | description |
 | --- | --- | --- | --- |
-| `ledgerful-version` | no | `v0.1.9` | pinned engine release version |
+| `ledgerful-version` | no | `v0.2.1` | pinned engine release version |
 | `ledgerful-checksum` | yes | — | SHA-256 of the release archive (.tar.gz/.zip) for the runner OS/arch; required in Workflow A |
 | `github-token` | no | `${{ github.token }}` | token used to authenticate the release download in Workflow A and to post the comment / check-run in Workflow B |
 | `fail-on` | no | — | optional `low`/`medium`/`high` threshold that fails the build non-blockingly |

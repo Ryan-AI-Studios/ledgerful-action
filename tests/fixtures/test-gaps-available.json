@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-31T10:00:00.000000000+00:00",
+  "baseRef": "main",
+  "headRef": "HEAD",
+  "headHash": "abcdef0123456789abcdef0123456789abcdef01",
+  "branchName": "feature/0115-pr-test-gaps-section",
+  "treeClean": true,
+  "changeCount": 2,
+  "changes": [
+    {
+      "path": "src/bar.rs",
+      "changeType": "modified",
+      "churn": 3,
+      "lastCommitAt": "2026-07-30T12:00:00Z",
+      "isSensitive": false
+    },
+    {
+      "path": "src/commands/foo.rs",
+      "changeType": "modified",
+      "churn": 1,
+      "lastCommitAt": "2026-07-29T12:00:00Z",
+      "isSensitive": false
+    }
+  ],
+  "riskLevel": "low",
+  "riskReasons": [],
+  "analysisWarnings": [],
+  "historyWindowCommits": 128,
+  "historyTruncated": false,
+  "testGaps": {
+    "status": "available",
+    "sourceSeedCount": 12,
+    "mappedCount": 7,
+    "fileMappedCount": 2,
+    "unmappedCount": 3,
+    "unmappedCapped": false,
+    "unmappedTotal": 3,
+    "unmapped": [
+      {
+        "symbol": "execute_foo",
+        "file": "src/commands/foo.rs",
+        "qualifiedName": "commands::foo::execute_foo",
+        "mappingKind": "none"
+      },
+      {
+        "symbol": "helper",
+        "file": "src/util.rs",
+        "mappingKind": "none"
+      }
+    ],
+    "mappedSample": [
+      {
+        "symbol": "bar",
+        "file": "src/bar.rs",
+        "coveringTestCount": 2,
+        "mappingKind": "symbol"
+      }
+    ],
+    "notes": [
+      "LCOV COVERAGE mapping kind does not currently persist (DDL NOT NULL on test_symbol_id)",
+      "Structural test_mapping only (IMPORT/NAMING_CONVENTION); not line coverage"
+    ]
+  }
+}

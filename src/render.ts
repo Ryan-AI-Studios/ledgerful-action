@@ -1,4 +1,9 @@
-import type { PrScanReport, PrScanChange } from "./schema.js";
+import type {
+  PrScanReport,
+  PrScanChange,
+  TestGapsReport,
+  TestGapsUnmappedEntry,
+} from "./schema.js";
 import { optionalString } from "./schema.js";
 import { escapeMarkdown } from "./escape.js";
 import {
@@ -17,6 +22,12 @@ const MAX_RENDER_STRING_ARRAY = 50;
 
 /** Max rows in the most-churned-files details block. */
 const MAX_CHURN_ROWS = 20;
+
+/** Max unmapped rows shown in the sticky Test gaps section. */
+const MAX_TEST_GAPS_UNMAPPED_ROWS = 20;
+
+/** Max notes lines in the optional details block. */
+const MAX_TEST_GAPS_NOTES_ROWS = 20;
 
 function sortChanges(changes: PrScanChange[]): PrScanChange[] {
   return [...changes].sort((a, b) => {
@@ -103,6 +114,106 @@ function renderChurnSection(report: PrScanReport): string {
   return section;
 }
 
+/**
+ * Format one unmapped gap line: symbol + file (+ optional qualifiedName).
+ * All dynamic fields are escapeMarkdown'd.
+ */
+function formatUnmappedEntry(entry: TestGapsUnmappedEntry): string {
+  const symbol = escapeMarkdown(entry.symbol);
+  const file = escapeMarkdown(entry.file);
+  const qn = optionalString(entry.qualifiedName);
+  if (qn !== undefined) {
+    return `- \`${symbol}\` · \`${file}\` · \`${escapeMarkdown(qn)}\``;
+  }
+  return `- \`${symbol}\` · \`${file}\``;
+}
+
+/**
+ * Structural test-gaps section for the sticky PR comment.
+ * Omitted when `testGaps` is absent (older engines — keeps v1 output stable).
+ *
+ * Honesty rules:
+ * - Never claim line coverage or "100% covered".
+ * - `available` + unmapped == 0 → no unmapped structural mappings only.
+ * - Non-available statuses → honest one-liners (not merge blockers).
+ */
+function renderTestGapsSection(gaps: TestGapsReport | undefined): string {
+  if (gaps === undefined) {
+    return "";
+  }
+
+  let section = `### Test gaps\n\n`;
+
+  switch (gaps.status) {
+    case "available": {
+      section += `**Status:** available · unmapped ${String(gaps.unmappedCount)} · mapped ${String(gaps.mappedCount)} · file-mapped ${String(gaps.fileMappedCount)}\n\n`;
+      if (gaps.unmappedCount > 0) {
+        section += `Changed production symbols/files without structural test mapping`;
+        if (gaps.unmappedCapped) {
+          section += ` (list capped; total unmapped ${String(gaps.unmappedTotal)})`;
+        }
+        section += `:\n\n`;
+        const sorted = [...gaps.unmapped].sort((a, b) => {
+          const byFile = a.file.localeCompare(b.file);
+          if (byFile !== 0) return byFile;
+          return a.symbol.localeCompare(b.symbol);
+        });
+        const visible = sorted.slice(0, MAX_TEST_GAPS_UNMAPPED_ROWS);
+        const hidden = sorted.length - visible.length;
+        for (const entry of visible) {
+          section += `${formatUnmappedEntry(entry)}\n`;
+        }
+        if (hidden > 0) {
+          section += `\n*…and ${String(hidden)} more.*\n`;
+        }
+        section += "\n";
+      } else {
+        section +=
+          "No unmapped production symbols/files in the structural test mapping for this change set. This is **not** line coverage and is **not** a claim of full test coverage.\n\n";
+      }
+      break;
+    }
+    case "empty_mapping":
+      section +=
+        "Structural `test_mapping` table is empty — mapping not populated for this repo yet. Not a merge block.\n\n";
+      break;
+    case "missing_table":
+      section +=
+        "Structural `test_mapping` table is missing — index/mapping setup required before gaps can be reported. Not a merge block.\n\n";
+      break;
+    case "no_source_seeds":
+      section +=
+        "No non-test source seeds in the change set — nothing to map for structural test gaps.\n\n";
+      break;
+    case "unavailable":
+      section +=
+        "Structural test mapping unavailable (no local index or soft-open failed). Honest CI default — not a merge block.\n\n";
+      break;
+    default: {
+      // Exhaustiveness guard; validateTestGaps rejects unknown statuses.
+      const _exhaustive: never = gaps.status;
+      void _exhaustive;
+      section += "Structural test mapping status unknown.\n\n";
+      break;
+    }
+  }
+
+  if (gaps.notes.length > 0) {
+    const notes = sortStrings(gaps.notes).slice(0, MAX_TEST_GAPS_NOTES_ROWS);
+    const hiddenNotes = gaps.notes.length - notes.length;
+    section += `<details>\n<summary>Test gaps notes</summary>\n\n`;
+    for (const note of notes) {
+      section += `- ${escapeMarkdown(note)}\n`;
+    }
+    if (hiddenNotes > 0) {
+      section += `\n*…and ${String(hiddenNotes)} more notes.*\n`;
+    }
+    section += `\n</details>\n\n`;
+  }
+
+  return section;
+}
+
 export function renderSummary(
   report: PrScanReport,
   artifactUrl?: string,
@@ -146,6 +257,7 @@ export function renderSummary(
   }
 
   body += renderChurnSection(report);
+  body += renderTestGapsSection(report.testGaps);
 
   if (artifactUrl) {
     body += `[Full report artifact](${artifactUrl})\n\n`;

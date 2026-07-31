@@ -195,6 +195,205 @@ describe("renderSummary", () => {
     expect(body).not.toMatch(/\bnull\b/);
     expect(body).toContain("## Ledgerful PR Risk Report");
   });
+
+  it("omits Test gaps section when testGaps is absent (v1 / old engine)", () => {
+    const body = renderSummary(sampleReport);
+    expect(body).not.toContain("### Test gaps");
+    expect(body).toBe(V1_SAMPLE_SUMMARY);
+  });
+});
+
+describe("renderSummary testGaps section (0115)", () => {
+  const baseNotes = [
+    "Structural test_mapping only (IMPORT/NAMING_CONVENTION); not line coverage",
+    "LCOV COVERAGE mapping kind does not currently persist (DDL NOT NULL on test_symbol_id)",
+  ];
+
+  function reportWithGaps(
+    testGaps: NonNullable<PrScanReport["testGaps"]>,
+  ): PrScanReport {
+    return {
+      ...sampleReport,
+      schemaVersion: 2,
+      testGaps,
+    };
+  }
+
+  it("renders available with unmapped list", () => {
+    const body = renderSummary(
+      reportWithGaps({
+        status: "available",
+        sourceSeedCount: 12,
+        mappedCount: 7,
+        fileMappedCount: 2,
+        unmappedCount: 3,
+        unmappedCapped: false,
+        unmappedTotal: 3,
+        unmapped: [
+          {
+            symbol: "execute_foo",
+            file: "src/commands/foo.rs",
+            qualifiedName: "commands::foo::execute_foo",
+            mappingKind: "none",
+          },
+          {
+            symbol: "zzz",
+            file: "src/a.rs",
+            mappingKind: "none",
+          },
+        ],
+        mappedSample: [
+          {
+            symbol: "bar",
+            file: "src/bar.rs",
+            coveringTestCount: 2,
+            mappingKind: "symbol",
+          },
+        ],
+        notes: baseNotes,
+      }),
+    );
+    expect(body).toContain("### Test gaps");
+    expect(body).toContain("**Status:** available");
+    expect(body).toContain("unmapped 3");
+    expect(body).toContain("without structural test mapping");
+    expect(body).toContain("execute\\_foo");
+    expect(body).toContain("src/commands/foo\\.rs");
+    expect(body).toContain("commands::foo::execute\\_foo");
+    // Deterministic sort: file a.rs before commands/foo.rs
+    expect(body.indexOf("src/a\\.rs")).toBeLessThan(
+      body.indexOf("src/commands/foo\\.rs"),
+    );
+    expect(body).toContain("Test gaps notes");
+    expect(body).toContain("Structural test\\_mapping only");
+  });
+
+  it("renders available with zero unmapped without claiming full coverage", () => {
+    const body = renderSummary(
+      reportWithGaps({
+        status: "available",
+        sourceSeedCount: 4,
+        mappedCount: 4,
+        fileMappedCount: 4,
+        unmappedCount: 0,
+        unmappedCapped: false,
+        unmappedTotal: 0,
+        unmapped: [],
+        mappedSample: [],
+        notes: baseNotes,
+      }),
+    );
+    expect(body).toContain("### Test gaps");
+    expect(body).toContain("No unmapped production symbols/files");
+    expect(body).toContain("not** line coverage");
+    expect(body.toLowerCase()).not.toContain("100% covered");
+    expect(body.toLowerCase()).not.toContain("fully covered");
+  });
+
+  it("renders honest one-liners for each non-available status", () => {
+    const cases: Array<{
+      status: NonNullable<PrScanReport["testGaps"]>["status"];
+      snippet: string;
+    }> = [
+      {
+        status: "empty_mapping",
+        snippet: "table is empty",
+      },
+      {
+        status: "missing_table",
+        snippet: "table is missing",
+      },
+      {
+        status: "no_source_seeds",
+        snippet: "No non-test source seeds",
+      },
+      {
+        status: "unavailable",
+        snippet: "Structural test mapping unavailable",
+      },
+    ];
+    for (const { status, snippet } of cases) {
+      const body = renderSummary(
+        reportWithGaps({
+          status,
+          sourceSeedCount: 0,
+          mappedCount: 0,
+          fileMappedCount: 0,
+          unmappedCount: 0,
+          unmappedCapped: false,
+          unmappedTotal: 0,
+          unmapped: [],
+          mappedSample: [],
+          notes: baseNotes,
+        }),
+      );
+      expect(body).toContain("### Test gaps");
+      expect(body).toContain(snippet);
+      expect(body).toContain("Test gaps notes");
+    }
+  });
+
+  it("escapes XSS-ish symbol/file/qualifiedName/notes in Test gaps", () => {
+    const body = renderSummary(
+      reportWithGaps({
+        status: "available",
+        sourceSeedCount: 1,
+        mappedCount: 0,
+        fileMappedCount: 0,
+        unmappedCount: 1,
+        unmappedCapped: false,
+        unmappedTotal: 1,
+        unmapped: [
+          {
+            symbol: "<script>alert(1)</script>",
+            file: "src/`rm -rf /`.ts",
+            qualifiedName: "[link](javascript:alert(1))",
+            mappingKind: "none",
+          },
+        ],
+        mappedSample: [],
+        notes: [
+          "<img src=x onerror=alert(1)>",
+          "<!--inject-->",
+          "Structural note",
+        ],
+      }),
+    );
+    expect(body).not.toContain("<script>");
+    expect(body).not.toContain("</script>");
+    expect(body).not.toContain("<img src=x onerror=alert(1)>");
+    expect(body).not.toContain("<!--inject-->");
+    expect(body).not.toContain("](javascript:alert(1))");
+    expect(body).not.toContain("`rm -rf /`");
+    // Escaped forms present
+    expect(body).toContain("&lt;script&gt;");
+    expect(body).toContain("javascript:alert\\(1\\)");
+  });
+
+  it("shows capped notice and hides excess unmapped rows", () => {
+    const unmapped = Array.from({ length: 25 }, (_, i) => ({
+      symbol: `sym_${String(i).padStart(2, "0")}`,
+      file: `src/f${String(i).padStart(2, "0")}.rs`,
+      mappingKind: "none" as const,
+    }));
+    const body = renderSummary(
+      reportWithGaps({
+        status: "available",
+        sourceSeedCount: 25,
+        mappedCount: 0,
+        fileMappedCount: 0,
+        unmappedCount: 25,
+        unmappedCapped: true,
+        unmappedTotal: 40,
+        unmapped,
+        mappedSample: [],
+        notes: [],
+      }),
+    );
+    expect(body).toContain("list capped; total unmapped 40");
+    expect(body).toContain("…and 5 more.");
+    expect(body).not.toContain("Test gaps notes");
+  });
 });
 
 describe("render size guards (DoD-4)", () => {

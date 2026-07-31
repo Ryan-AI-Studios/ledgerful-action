@@ -204,6 +204,13 @@ This Action accepts **`schemaVersion` 1 or 2** (mixed Workflow A/B rollouts duri
   report-level — `historyWindowCommits`, `historyTruncated`. When present, the PR comment may include
   a size-capped “Most-churned files” section. Comment bodies and check-run text are bounded under
   GitHub’s API limits (char/byte guards with an explicit truncation marker).
+- **`testGaps` (v2 additive, optional for older engines):** structural test-mapping gap summary for
+  the change set (`status`, counts, capped `unmapped` / `mappedSample`, honesty `notes`). Absent key
+  remains valid (older engines). When present, the Action **fail-closes** via `validateTestGaps` and
+  renders a sticky **Test gaps** section. Status vocabulary:
+  `available` \| `empty_mapping` \| `missing_table` \| `no_source_seeds` \| `unavailable`.
+  This is **not** line coverage; CI without a local index typically shows `unavailable` (honest
+  default, not a merge failure). Never treat empty mapped lists as “fully covered.”
 
 Breaking schema changes bump `schemaVersion`; this Action accepts 1 and 2. Deterministic for a given
 diff + pinned engine version.

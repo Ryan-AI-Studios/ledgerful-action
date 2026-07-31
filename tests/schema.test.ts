@@ -6,6 +6,7 @@ import {
   displayBranchName,
   optionalString,
   validateReport,
+  validateTestGaps,
   type PrScanReport,
 } from "../src/schema.js";
 import sample from "./fixtures/pr-scan-report.sample.json";
@@ -29,6 +30,42 @@ function validReport(overrides: Record<string, unknown> = {}): unknown {
     riskLevel: "low",
     riskReasons: [],
     analysisWarnings: [],
+    ...overrides,
+  };
+}
+
+/** Minimal valid testGaps payload (available, one unmapped). */
+function validTestGaps(
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    status: "available",
+    sourceSeedCount: 12,
+    mappedCount: 7,
+    fileMappedCount: 2,
+    unmappedCount: 1,
+    unmappedCapped: false,
+    unmappedTotal: 1,
+    unmapped: [
+      {
+        symbol: "execute_foo",
+        file: "src/commands/foo.rs",
+        qualifiedName: "commands::foo::execute_foo",
+        mappingKind: "none",
+      },
+    ],
+    mappedSample: [
+      {
+        symbol: "bar",
+        file: "src/bar.rs",
+        coveringTestCount: 2,
+        mappingKind: "symbol",
+      },
+    ],
+    notes: [
+      "Structural test_mapping only (IMPORT/NAMING_CONVENTION); not line coverage",
+      "LCOV COVERAGE mapping kind does not currently persist (DDL NOT NULL on test_symbol_id)",
+    ],
     ...overrides,
   };
 }
@@ -394,5 +431,249 @@ describe("validateReport", () => {
     expect(() => {
       validateReport(validReport({ prNumber: "7" }));
     }).toThrow(/prNumber/);
+  });
+
+  it("accepts reports with absent testGaps (old engine)", () => {
+    expect(() => {
+      validateReport(validReport());
+    }).not.toThrow();
+    const report = validReport() as Record<string, unknown>;
+    expect(report.testGaps).toBeUndefined();
+  });
+
+  it("accepts reports with a valid testGaps payload", () => {
+    expect(() => {
+      validateReport(
+        validReport({ schemaVersion: 2, testGaps: validTestGaps() }),
+      );
+    }).not.toThrow();
+  });
+
+  it("rejects hostile/huge testGaps via validateReport", () => {
+    expect(() => {
+      validateReport(
+        validReport({
+          testGaps: validTestGaps({
+            unmapped: Array.from({ length: 51 }, (_, i) => ({
+              symbol: `s${String(i)}`,
+              file: `f${String(i)}.rs`,
+              mappingKind: "none",
+            })),
+          }),
+        }),
+      );
+    }).toThrow(/testGaps\.unmapped array exceeds/);
+    expect(() => {
+      validateReport(
+        validReport({
+          testGaps: validTestGaps({ status: "empty" }),
+        }),
+      );
+    }).toThrow(/testGaps\.status/);
+  });
+});
+
+describe("validateTestGaps", () => {
+  it("accepts a full available payload", () => {
+    expect(() => {
+      validateTestGaps(validTestGaps());
+    }).not.toThrow();
+  });
+
+  it("accepts each known status with empty arrays", () => {
+    for (const status of [
+      "available",
+      "empty_mapping",
+      "missing_table",
+      "no_source_seeds",
+      "unavailable",
+    ] as const) {
+      expect(() => {
+        validateTestGaps(
+          validTestGaps({
+            status,
+            unmappedCount: 0,
+            unmappedTotal: 0,
+            unmapped: [],
+            mappedSample: [],
+            mappedCount: 0,
+            fileMappedCount: 0,
+            sourceSeedCount: 0,
+          }),
+        );
+      }).not.toThrow();
+    }
+  });
+
+  it("rejects non-object and wrong types with neutral errors", () => {
+    expect(() => {
+      validateTestGaps(null);
+    }).toThrow(/testGaps must be an object/);
+    expect(() => {
+      validateTestGaps([]);
+    }).toThrow(/testGaps must be an object/);
+    expect(() => {
+      validateTestGaps("nope");
+    }).toThrow(/testGaps must be an object/);
+    expect(() => {
+      validateTestGaps(validTestGaps({ status: 1 }));
+    }).toThrow(/testGaps\.status/);
+    expect(() => {
+      validateTestGaps(validTestGaps({ unmappedCapped: "yes" }));
+    }).toThrow(/unmappedCapped/);
+    expect(() => {
+      validateTestGaps(validTestGaps({ mappedCount: -1 }));
+    }).toThrow(/mappedCount/);
+    expect(() => {
+      validateTestGaps(validTestGaps({ sourceSeedCount: 1.5 }));
+    }).toThrow(/sourceSeedCount/);
+    expect(() => {
+      validateTestGaps(validTestGaps({ unmappedTotal: Number.POSITIVE_INFINITY }));
+    }).toThrow(/unmappedTotal/);
+  });
+
+  it("rejects bare empty status and unknown statuses", () => {
+    expect(() => {
+      validateTestGaps(validTestGaps({ status: "empty" }));
+    }).toThrow(/testGaps\.status/);
+    expect(() => {
+      validateTestGaps(validTestGaps({ status: "ok" }));
+    }).toThrow(/testGaps\.status/);
+  });
+
+  it("rejects wrong mappingKind on unmapped and mappedSample", () => {
+    expect(() => {
+      validateTestGaps(
+        validTestGaps({
+          unmapped: [
+            {
+              symbol: "a",
+              file: "a.rs",
+              mappingKind: "symbol",
+            },
+          ],
+        }),
+      );
+    }).toThrow(/unmapped\[\]\.mappingKind/);
+    expect(() => {
+      validateTestGaps(
+        validTestGaps({
+          mappedSample: [
+            {
+              symbol: "a",
+              file: "a.rs",
+              coveringTestCount: 1,
+              mappingKind: "none",
+            },
+          ],
+        }),
+      );
+    }).toThrow(/mappedSample\[\]\.mappingKind/);
+  });
+
+  it("rejects missing arrays and wrong entry shapes", () => {
+    expect(() => {
+      validateTestGaps(validTestGaps({ unmapped: "nope" }));
+    }).toThrow(/testGaps\.unmapped must be an array/);
+    expect(() => {
+      validateTestGaps(validTestGaps({ mappedSample: null }));
+    }).toThrow(/testGaps\.mappedSample must be an array/);
+    expect(() => {
+      validateTestGaps(validTestGaps({ notes: {} }));
+    }).toThrow(/testGaps\.notes must be an array/);
+    expect(() => {
+      validateTestGaps(validTestGaps({ unmapped: [null] }));
+    }).toThrow(/unmapped entry must be an object/);
+    expect(() => {
+      validateTestGaps(
+        validTestGaps({
+          mappedSample: [
+            {
+              symbol: "a",
+              file: "a.rs",
+              coveringTestCount: -1,
+              mappingKind: "file",
+            },
+          ],
+        }),
+      );
+    }).toThrow(/coveringTestCount/);
+    expect(() => {
+      validateTestGaps(
+        validTestGaps({
+          unmapped: [{ symbol: "", file: "a.rs", mappingKind: "none" }],
+        }),
+      );
+    }).toThrow(/unmapped\[\]\.symbol/);
+  });
+
+  it("rejects oversized unmapped, mappedSample, notes, and strings", () => {
+    expect(() => {
+      validateTestGaps(
+        validTestGaps({
+          unmapped: Array.from({ length: 51 }, (_, i) => ({
+            symbol: `s${String(i)}`,
+            file: `f${String(i)}.rs`,
+            mappingKind: "none",
+          })),
+        }),
+      );
+    }).toThrow(/unmapped array exceeds/);
+    expect(() => {
+      validateTestGaps(
+        validTestGaps({
+          mappedSample: Array.from({ length: 21 }, (_, i) => ({
+            symbol: `s${String(i)}`,
+            file: `f${String(i)}.rs`,
+            coveringTestCount: 1,
+            mappingKind: "file",
+          })),
+        }),
+      );
+    }).toThrow(/mappedSample array exceeds/);
+    expect(() => {
+      validateTestGaps(
+        validTestGaps({
+          notes: Array.from({ length: 51 }, () => "n"),
+        }),
+      );
+    }).toThrow(/notes array exceeds/);
+    const huge = "x".repeat(4097);
+    expect(() => {
+      validateTestGaps(
+        validTestGaps({
+          unmapped: [
+            { symbol: huge, file: "a.rs", mappingKind: "none" },
+          ],
+        }),
+      );
+    }).toThrow(/unmapped\[\]\.symbol/);
+  });
+
+  it("never echoes hostile payload content into validation errors", () => {
+    const attacker = "attacker-payload-must-not-leak";
+    try {
+      validateTestGaps(validTestGaps({ status: attacker }));
+      expect.unreachable("should have thrown");
+    } catch (err) {
+      expect(String(err)).not.toContain(attacker);
+      expect(String(err)).toMatch(/testGaps\.status/);
+    }
+    try {
+      validateTestGaps(
+        validTestGaps({
+          unmapped: [
+            {
+              symbol: attacker,
+              file: "a.rs",
+              mappingKind: "evil",
+            },
+          ],
+        }),
+      );
+      expect.unreachable("should have thrown");
+    } catch (err) {
+      expect(String(err)).not.toContain(attacker);
+    }
   });
 });

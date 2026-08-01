@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-01T10:00:00.000000000+00:00",
+  "baseRef": "main",
+  "headRef": "HEAD",
+  "headHash": "abcdef0123456789abcdef0123456789abcdef01",
+  "branchName": "feature/0118-affected-flows-sticky",
+  "treeClean": true,
+  "changeCount": 1,
+  "changes": [
+    {
+      "path": "src/handlers/items.rs",
+      "changeType": "modified",
+      "churn": 2,
+      "lastCommitAt": "2026-07-31T12:00:00Z",
+      "isSensitive": false
+    }
+  ],
+  "riskLevel": "low",
+  "riskReasons": [],
+  "analysisWarnings": [],
+  "historyWindowCommits": 128,
+  "historyTruncated": false,
+  "affectedFlows": {
+    "status": "available",
+    "flowCount": 2,
+    "flowCapped": false,
+    "flowTotal": 2,
+    "flows": [
+      {
+        "method": "GET",
+        "pathPattern": "/api/items",
+        "handlerSymbolName": "list_items",
+        "handlerFile": "src/handlers/items.rs",
+        "framework": "Axum",
+        "matchKind": "handler_symbol",
+        "routeConfidence": 1.0
+      },
+      {
+        "method": "POST",
+        "pathPattern": "/api/items",
+        "handlerSymbolName": "create_item",
+        "handlerFile": "src/handlers/items.rs",
+        "framework": "Axum",
+        "matchKind": "handler_impl_file"
+      }
+    ],
+    "notes": [
+      "Registered HTTP routes only (api_routes); not distributed traces or CRG-style call-chain flows."
+    ]
+  }
+}

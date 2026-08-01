@@ -3,6 +3,9 @@ import type {
   PrScanChange,
   TestGapsReport,
   TestGapsUnmappedEntry,
+  AffectedFlowsReport,
+  AffectedFlowEntry,
+  AffectedFlowMatchKind,
 } from "./schema.js";
 import { optionalString } from "./schema.js";
 import { escapeMarkdown } from "./escape.js";
@@ -28,6 +31,21 @@ const MAX_TEST_GAPS_UNMAPPED_ROWS = 20;
 
 /** Max notes lines in the optional details block. */
 const MAX_TEST_GAPS_NOTES_ROWS = 20;
+
+/** Max flow rows shown in the sticky Affected flows section. */
+const MAX_AFFECTED_FLOWS_ROWS = 15;
+
+/** Max notes lines in the optional Affected flows details block. */
+const MAX_AFFECTED_FLOWS_NOTES_ROWS = 20;
+
+/** Match-kind sort priority (lower = stronger; mirrors engine MatchKind::priority). */
+const MATCH_KIND_PRIORITY: Record<AffectedFlowMatchKind, number> = {
+  handler_symbol: 1,
+  handler_impl_file: 2,
+  route_file: 3,
+  blast_symbol: 4,
+  blast_file: 5,
+};
 
 function sortChanges(changes: PrScanChange[]): PrScanChange[] {
   return [...changes].sort((a, b) => {
@@ -214,6 +232,133 @@ function renderTestGapsSection(gaps: TestGapsReport | undefined): string {
   return section;
 }
 
+/**
+ * Format one affected-flow line.
+ * escapeMarkdown on method, pathPattern, handlerSymbolName, handlerFile, framework.
+ */
+function formatAffectedFlowEntry(entry: AffectedFlowEntry): string {
+  const method = escapeMarkdown(entry.method);
+  const path = escapeMarkdown(entry.pathPattern);
+  const framework = escapeMarkdown(entry.framework);
+  let line = `- \`${method}\` \`${path}\` · ${framework} · ${escapeMarkdown(entry.matchKind)}`;
+  const handler = optionalString(entry.handlerSymbolName);
+  if (handler !== undefined) {
+    line += ` · \`${escapeMarkdown(handler)}\``;
+  }
+  const file = optionalString(entry.handlerFile);
+  if (file !== undefined) {
+    line += ` · \`${escapeMarkdown(file)}\``;
+  }
+  const confClass = optionalString(entry.confidenceClass);
+  if (confClass !== undefined) {
+    line += ` · ${escapeMarkdown(confClass)}`;
+  }
+  return line;
+}
+
+/** Deterministic sort: matchKind priority, method, path, framework, handler. */
+function sortAffectedFlows(flows: AffectedFlowEntry[]): AffectedFlowEntry[] {
+  return [...flows].sort((a, b) => {
+    const byKind =
+      MATCH_KIND_PRIORITY[a.matchKind] - MATCH_KIND_PRIORITY[b.matchKind];
+    if (byKind !== 0) return byKind;
+    const byMethod = a.method.localeCompare(b.method);
+    if (byMethod !== 0) return byMethod;
+    const byPath = a.pathPattern.localeCompare(b.pathPattern);
+    if (byPath !== 0) return byPath;
+    const byFw = a.framework.localeCompare(b.framework);
+    if (byFw !== 0) return byFw;
+    return (a.handlerSymbolName ?? "").localeCompare(
+      b.handlerSymbolName ?? "",
+    );
+  });
+}
+
+/**
+ * Affected registered HTTP flows section for the sticky PR comment.
+ * Omitted when `affectedFlows` is absent (older engines — keeps prior output stable).
+ *
+ * Honesty rules:
+ * - Registered `api_routes` only — not CRG execution-path or distributed-trace flows.
+ * - `available` + flowCount == 0 → no registered HTTP flows touched.
+ * - Non-available statuses → honest one-liners (not merge blockers).
+ * - `unavailable` is the CI index-free default, not a merge block.
+ */
+function renderAffectedFlowsSection(
+  flows: AffectedFlowsReport | undefined,
+): string {
+  if (flows === undefined) {
+    return "";
+  }
+
+  let section = `### Affected flows\n\n`;
+
+  switch (flows.status) {
+    case "available": {
+      section += `**Status:** available · flows ${String(flows.flowCount)}`;
+      if (flows.flowCapped) {
+        section += ` (list capped; total ${String(flows.flowTotal)})`;
+      }
+      section += `\n\n`;
+      if (flows.flowCount > 0 && flows.flows.length > 0) {
+        section += `Registered HTTP routes touched by this change set (api_routes; not CRG execution-path flows):\n\n`;
+        const sorted = sortAffectedFlows(flows.flows);
+        const visible = sorted.slice(0, MAX_AFFECTED_FLOWS_ROWS);
+        const hidden = sorted.length - visible.length;
+        for (const entry of visible) {
+          section += `${formatAffectedFlowEntry(entry)}\n`;
+        }
+        if (hidden > 0) {
+          section += `\n*…and ${String(hidden)} more.*\n`;
+        }
+        section += "\n";
+      } else {
+        section +=
+          "No registered HTTP flows touched by this change set\n\n";
+      }
+      break;
+    }
+    case "empty_map":
+      section +=
+        "Structural `api_routes` table is empty — route map not populated for this repo yet. Not a merge block.\n\n";
+      break;
+    case "missing_table":
+      section +=
+        "Structural `api_routes` table is missing — index/route extraction required before affected flows can be reported. Not a merge block.\n\n";
+      break;
+    case "no_change_seeds":
+      section +=
+        "No change-set seeds for route matching — nothing to map for affected HTTP flows.\n\n";
+      break;
+    case "unavailable":
+      section +=
+        "Affected HTTP flows unavailable (no local index or soft-open failed). Honest CI default — not a merge block.\n\n";
+      break;
+    default: {
+      // Exhaustiveness guard; validateAffectedFlows rejects unknown statuses.
+      const _exhaustive: never = flows.status;
+      void _exhaustive;
+      section += "Affected HTTP flows status unknown.\n\n";
+      break;
+    }
+  }
+
+  if (flows.notes.length > 0) {
+    const notes = sortStrings(flows.notes).slice(0, MAX_AFFECTED_FLOWS_NOTES_ROWS);
+    const hiddenNotes = flows.notes.length - notes.length;
+    section += `<details>\n<summary>Affected flows notes</summary>\n\n`;
+    for (const note of notes) {
+      section += `- ${escapeMarkdown(note)}\n`;
+    }
+    if (hiddenNotes > 0) {
+      section += `\n*…and ${String(hiddenNotes)} more notes.*\n`;
+    }
+    section += `\n</details>\n\n`;
+  }
+
+  return section;
+}
+
 export function renderSummary(
   report: PrScanReport,
   artifactUrl?: string,
@@ -258,6 +403,7 @@ export function renderSummary(
 
   body += renderChurnSection(report);
   body += renderTestGapsSection(report.testGaps);
+  body += renderAffectedFlowsSection(report.affectedFlows);
 
   if (artifactUrl) {
     body += `[Full report artifact](${artifactUrl})\n\n`;

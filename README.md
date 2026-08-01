@@ -211,6 +211,16 @@ This Action accepts **`schemaVersion` 1 or 2** (mixed Workflow A/B rollouts duri
   `available` \| `empty_mapping` \| `missing_table` \| `no_source_seeds` \| `unavailable`.
   This is **not** line coverage; CI without a local index typically shows `unavailable` (honest
   default, not a merge failure). Never treat empty mapped lists as “fully covered.”
+- **`affectedFlows` (additive on schema v1|v2, optional for older engines):** registered HTTP routes
+  (`api_routes`) touched by the change set (`status`, `flowCount` / `flowCapped` / `flowTotal`,
+  capped `flows`, honesty `notes`). Absent key remains valid (older engines). When present, the
+  Action **fail-closes** via `validateAffectedFlows` and renders a sticky **Affected flows** section
+  after Test gaps. Status vocabulary:
+  `available` \| `empty_map` \| `missing_table` \| `no_change_seeds` \| `unavailable`.
+  Match kinds: `handler_symbol` \| `handler_impl_file` \| `route_file` \| `blast_symbol` \|
+  `blast_file`. Blast-mediated rows may carry SCREAMING_SNAKE `confidenceClass`. This is **not**
+  CRG execution-path / distributed-trace flows; CI without a local index typically shows
+  `unavailable` (honest default, not a merge failure). Visible sticky rows are capped at **15**.
 
 Breaking schema changes bump `schemaVersion`; this Action accepts 1 and 2. Deterministic for a given
 diff + pinned engine version.

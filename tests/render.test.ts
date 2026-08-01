@@ -201,6 +201,12 @@ describe("renderSummary", () => {
     expect(body).not.toContain("### Test gaps");
     expect(body).toBe(V1_SAMPLE_SUMMARY);
   });
+
+  it("omits Affected flows section when affectedFlows is absent (v1 / old engine)", () => {
+    const body = renderSummary(sampleReport);
+    expect(body).not.toContain("### Affected flows");
+    expect(body).toBe(V1_SAMPLE_SUMMARY);
+  });
 });
 
 describe("renderSummary testGaps section (0115)", () => {
@@ -393,6 +399,236 @@ describe("renderSummary testGaps section (0115)", () => {
     expect(body).toContain("list capped; total unmapped 40");
     expect(body).toContain("…and 5 more.");
     expect(body).not.toContain("Test gaps notes");
+  });
+});
+
+describe("renderSummary affectedFlows section (0118)", () => {
+  const honestyNote =
+    "Registered HTTP routes only (api_routes); not distributed traces or CRG-style call-chain flows.";
+
+  function reportWithFlows(
+    affectedFlows: NonNullable<PrScanReport["affectedFlows"]>,
+  ): PrScanReport {
+    return {
+      ...sampleReport,
+      schemaVersion: 2,
+      affectedFlows,
+    };
+  }
+
+  it("renders available with flow list and sorts by matchKind priority", () => {
+    const body = renderSummary(
+      reportWithFlows({
+        status: "available",
+        flowCount: 2,
+        flowCapped: false,
+        flowTotal: 2,
+        flows: [
+          {
+            method: "POST",
+            pathPattern: "/b",
+            handlerSymbolName: "create_b",
+            framework: "Axum",
+            matchKind: "route_file",
+          },
+          {
+            method: "GET",
+            pathPattern: "/a",
+            handlerSymbolName: "list_a",
+            handlerFile: "src/a.rs",
+            framework: "Axum",
+            matchKind: "handler_symbol",
+          },
+        ],
+        notes: [honestyNote],
+      }),
+    );
+    expect(body).toContain("### Affected flows");
+    expect(body).toContain("**Status:** available");
+    expect(body).toContain("flows 2");
+    expect(body).toContain("Registered HTTP routes touched");
+    expect(body).toContain("not CRG execution-path");
+    expect(body).toContain("list\\_a");
+    expect(body).toContain("src/a\\.rs");
+    // Deterministic sort: handler_symbol (/a) before route_file (/b)
+    expect(body.indexOf("`/a`")).toBeLessThan(body.indexOf("`/b`"));
+    expect(body).toContain("Affected flows notes");
+    expect(body).toContain("api\\_routes");
+  });
+
+  it("renders available with zero flows as all-clear (not CRG claim)", () => {
+    const body = renderSummary(
+      reportWithFlows({
+        status: "available",
+        flowCount: 0,
+        flowCapped: false,
+        flowTotal: 0,
+        flows: [],
+        notes: [honestyNote],
+      }),
+    );
+    expect(body).toContain("### Affected flows");
+    expect(body).toContain(
+      "No registered HTTP flows touched by this change set",
+    );
+    // All-clear must not invent execution-path / full-cover claims
+    expect(body.toLowerCase()).not.toContain("execution path complete");
+    expect(body.toLowerCase()).not.toContain("fully covered");
+    // Honesty note may mention CRG as a disclaimer; body must not claim CRG flows
+    expect(body.toLowerCase()).not.toContain("crg execution-path flows:");
+  });
+
+  it("renders honest one-liners for each non-available status", () => {
+    const cases: Array<{
+      status: NonNullable<PrScanReport["affectedFlows"]>["status"];
+      snippet: string;
+    }> = [
+      {
+        status: "empty_map",
+        snippet: "table is empty",
+      },
+      {
+        status: "missing_table",
+        snippet: "table is missing",
+      },
+      {
+        status: "no_change_seeds",
+        snippet: "No change-set seeds",
+      },
+      {
+        status: "unavailable",
+        snippet: "Affected HTTP flows unavailable",
+      },
+    ];
+    for (const { status, snippet } of cases) {
+      const body = renderSummary(
+        reportWithFlows({
+          status,
+          flowCount: 0,
+          flowCapped: false,
+          flowTotal: 0,
+          flows: [],
+          notes: [honestyNote],
+        }),
+      );
+      expect(body).toContain("### Affected flows");
+      expect(body).toContain(snippet);
+      expect(body).toContain("Affected flows notes");
+      if (status === "unavailable") {
+        expect(body).toContain("not a merge block");
+      }
+    }
+  });
+
+  it("escapes XSS-ish method/path/handler/framework/notes in Affected flows", () => {
+    const body = renderSummary(
+      reportWithFlows({
+        status: "available",
+        flowCount: 1,
+        flowCapped: false,
+        flowTotal: 1,
+        flows: [
+          {
+            method: "<script>alert(1)</script>",
+            pathPattern: "/`rm -rf /`",
+            handlerSymbolName: "[link](javascript:alert(1))",
+            handlerFile: "src/`evil`.rs",
+            framework: "Axum_<img>",
+            matchKind: "handler_impl_file",
+            confidenceClass: "RESOLVED",
+          },
+        ],
+        notes: ["<img src=x onerror=alert(1)>", "<!--inject-->", honestyNote],
+      }),
+    );
+    expect(body).not.toContain("<script>");
+    expect(body).not.toContain("</script>");
+    expect(body).not.toContain("<img src=x onerror=alert(1)>");
+    expect(body).not.toContain("<!--inject-->");
+    expect(body).not.toContain("](javascript:alert(1))");
+    expect(body).not.toContain("`rm -rf /`");
+    expect(body).toContain("&lt;script&gt;");
+    expect(body).toContain("javascript:alert\\(1\\)");
+  });
+
+  it("shows capped notice and hides excess flow rows at 15", () => {
+    const flows = Array.from({ length: 20 }, (_, i) => ({
+      method: "GET",
+      pathPattern: `/p${String(i).padStart(2, "0")}`,
+      framework: "Axum",
+      matchKind: "route_file" as const,
+    }));
+    const body = renderSummary(
+      reportWithFlows({
+        status: "available",
+        flowCount: 20,
+        flowCapped: true,
+        flowTotal: 40,
+        flows,
+        notes: [],
+      }),
+    );
+    expect(body).toContain("list capped; total 40");
+    expect(body).toContain("…and 5 more.");
+    expect(body).not.toContain("Affected flows notes");
+    // Cap visible rows at 15
+    expect(body).toContain("`/p00`");
+    expect(body).toContain("`/p14`");
+    expect(body).not.toContain("`/p15`");
+  });
+
+  it("renders after Test gaps when both sections are present", () => {
+    const body = renderSummary({
+      ...sampleReport,
+      schemaVersion: 2,
+      testGaps: {
+        status: "unavailable",
+        sourceSeedCount: 0,
+        mappedCount: 0,
+        fileMappedCount: 0,
+        unmappedCount: 0,
+        unmappedCapped: false,
+        unmappedTotal: 0,
+        unmapped: [],
+        mappedSample: [],
+        notes: [],
+      },
+      affectedFlows: {
+        status: "unavailable",
+        flowCount: 0,
+        flowCapped: false,
+        flowTotal: 0,
+        flows: [],
+        notes: [],
+      },
+    });
+    expect(body.indexOf("### Test gaps")).toBeLessThan(
+      body.indexOf("### Affected flows"),
+    );
+  });
+
+  it("shows confidenceClass for blast-mediated rows", () => {
+    const body = renderSummary(
+      reportWithFlows({
+        status: "available",
+        flowCount: 1,
+        flowCapped: false,
+        flowTotal: 1,
+        flows: [
+          {
+            method: "DELETE",
+            pathPattern: "/items/{id}",
+            framework: "Axum",
+            matchKind: "blast_symbol",
+            confidenceClass: "SCIP_BOUND",
+            evidence: "scip:ref",
+          },
+        ],
+        notes: [honestyNote],
+      }),
+    );
+    expect(body).toContain("blast\\_symbol");
+    expect(body).toContain("SCIP\\_BOUND");
   });
 });
 

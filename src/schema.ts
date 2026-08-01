@@ -19,6 +19,9 @@ const MAX_TEST_GAPS_UNMAPPED = 50;
 /** Engine mappedSample cap is 5; allow headroom. */
 const MAX_TEST_GAPS_MAPPED_SAMPLE = 20;
 const MAX_TEST_GAPS_NOTES = 50;
+/** Engine flows cap is 20; allow headroom for older/experimental emitters. */
+const MAX_AFFECTED_FLOWS = 50;
+const MAX_AFFECTED_FLOWS_NOTES = 50;
 
 /** Soft ISO-8601 shape: YYYY-MM-DDT… (engine emits full timestamps). */
 const SOFT_ISO8601_RE = /^\d{4}-\d{2}-\d{2}T/;
@@ -84,6 +87,69 @@ export interface TestGapsReport {
   notes: string[];
 }
 
+/**
+ * Structural affected-HTTP-flows status vocabulary (0118).
+ * Never bare `"empty"` — distinguish probe outcomes honestly.
+ */
+export type AffectedFlowsStatus =
+  | "available"
+  | "empty_map"
+  | "missing_table"
+  | "no_change_seeds"
+  | "unavailable";
+
+/**
+ * How a registered route was matched to the change set.
+ * Priority (strongest first): handler_symbol → handler_impl_file → route_file
+ * → blast_symbol → blast_file.
+ */
+export type AffectedFlowMatchKind =
+  | "handler_symbol"
+  | "handler_impl_file"
+  | "route_file"
+  | "blast_symbol"
+  | "blast_file";
+
+/**
+ * Blast-edge confidence class (0117 SCREAMING_SNAKE).
+ * Present only on blast-mediated flow matches.
+ */
+export type AffectedFlowConfidenceClass =
+  | "SCIP_BOUND"
+  | "RESOLVED"
+  | "AMBIGUOUS"
+  | "UNRESOLVED"
+  | "CAPPED"
+  | "UNKNOWN";
+
+/** One affected registered HTTP flow (api_routes hit). */
+export interface AffectedFlowEntry {
+  method: string;
+  pathPattern: string;
+  handlerSymbolName?: string;
+  handlerFile?: string;
+  framework: string;
+  matchKind: AffectedFlowMatchKind;
+  routeConfidence?: number;
+  /** SCREAMING_SNAKE; only blast-mediated matches. */
+  confidenceClass?: AffectedFlowConfidenceClass;
+  evidence?: string;
+}
+
+/**
+ * Change-set affected HTTP flows report (0118; additive on schema v2).
+ * Optional for older engines — absent is valid. When present, fail-closed.
+ * Registered routes only — not CRG execution-path / distributed-trace flows.
+ */
+export interface AffectedFlowsReport {
+  status: AffectedFlowsStatus;
+  flowCount: number;
+  flowCapped: boolean;
+  flowTotal: number;
+  flows: AffectedFlowEntry[];
+  notes: string[];
+}
+
 const RISK_LEVELS = new Set<string>(["low", "medium", "high"]);
 const CHANGE_TYPES = new Set<string>([
   "added",
@@ -100,6 +166,28 @@ const TEST_GAPS_STATUSES = new Set<string>([
 ]);
 const UNMAPPED_MAPPING_KINDS = new Set<string>(["none"]);
 const MAPPED_MAPPING_KINDS = new Set<string>(["symbol", "file"]);
+const AFFECTED_FLOWS_STATUSES = new Set<string>([
+  "available",
+  "empty_map",
+  "missing_table",
+  "no_change_seeds",
+  "unavailable",
+]);
+const AFFECTED_FLOW_MATCH_KINDS = new Set<string>([
+  "handler_symbol",
+  "handler_impl_file",
+  "route_file",
+  "blast_symbol",
+  "blast_file",
+]);
+const AFFECTED_FLOW_CONFIDENCE_CLASSES = new Set<string>([
+  "SCIP_BOUND",
+  "RESOLVED",
+  "AMBIGUOUS",
+  "UNRESOLVED",
+  "CAPPED",
+  "UNKNOWN",
+]);
 
 export interface PrScanReport {
   schemaVersion: number;
@@ -138,6 +226,12 @@ export interface PrScanReport {
    * Optional for older engines — absent is valid. When present, fail-closed.
    */
   testGaps?: TestGapsReport;
+  /**
+   * Affected registered HTTP flows (0118; additive on schema v2).
+   * Optional for older engines — absent is valid. When present, fail-closed.
+   * Not CRG execution-path / distributed-trace flows.
+   */
+  affectedFlows?: AffectedFlowsReport;
 }
 
 /**
@@ -286,6 +380,11 @@ export function validateReport(value: unknown): asserts value is PrScanReport {
   if (obj.testGaps !== undefined) {
     validateTestGaps(obj.testGaps);
   }
+
+  // Optional additive affectedFlows (0118). Absent = valid (old engine). Present = fail-closed.
+  if (obj.affectedFlows !== undefined) {
+    validateAffectedFlows(obj.affectedFlows);
+  }
 }
 
 /**
@@ -310,11 +409,11 @@ export function validateTestGaps(value: unknown): asserts value is TestGapsRepor
     );
   }
 
-  assertNonNegativeIntegerField(gaps, "sourceSeedCount");
-  assertNonNegativeIntegerField(gaps, "mappedCount");
-  assertNonNegativeIntegerField(gaps, "fileMappedCount");
-  assertNonNegativeIntegerField(gaps, "unmappedCount");
-  assertNonNegativeIntegerField(gaps, "unmappedTotal");
+  assertNonNegativeIntegerField(gaps, "sourceSeedCount", "testGaps");
+  assertNonNegativeIntegerField(gaps, "mappedCount", "testGaps");
+  assertNonNegativeIntegerField(gaps, "fileMappedCount", "testGaps");
+  assertNonNegativeIntegerField(gaps, "unmappedCount", "testGaps");
+  assertNonNegativeIntegerField(gaps, "unmappedTotal", "testGaps");
 
   if (typeof gaps.unmappedCapped !== "boolean") {
     throw new Error(
@@ -424,10 +523,154 @@ function validateMappedSampleEntry(entry: unknown): void {
   }
 }
 
+/**
+ * Fail-closed validation for affected HTTP flows payloads (0118).
+ * Neutral errors only — never echo untrusted field values into messages.
+ */
+export function validateAffectedFlows(
+  value: unknown,
+): asserts value is AffectedFlowsReport {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new Error(
+      "Invalid PR scan report: affectedFlows must be an object when present.",
+    );
+  }
+
+  const flowsReport = value as Record<string, unknown>;
+
+  if (
+    typeof flowsReport.status !== "string" ||
+    !AFFECTED_FLOWS_STATUSES.has(flowsReport.status)
+  ) {
+    throw new Error(
+      "Invalid PR scan report: affectedFlows.status must be available, empty_map, missing_table, no_change_seeds, or unavailable.",
+    );
+  }
+
+  assertNonNegativeIntegerField(flowsReport, "flowCount", "affectedFlows");
+  assertNonNegativeIntegerField(flowsReport, "flowTotal", "affectedFlows");
+
+  if (typeof flowsReport.flowCapped !== "boolean") {
+    throw new Error(
+      "Invalid PR scan report: affectedFlows.flowCapped must be a boolean.",
+    );
+  }
+
+  if (!Array.isArray(flowsReport.flows)) {
+    throw new Error(
+      "Invalid PR scan report: affectedFlows.flows must be an array.",
+    );
+  }
+  if (flowsReport.flows.length > MAX_AFFECTED_FLOWS) {
+    throw new Error(
+      "Invalid PR scan report: affectedFlows.flows array exceeds size limit.",
+    );
+  }
+  for (const entry of flowsReport.flows) {
+    validateAffectedFlowEntry(entry);
+  }
+
+  if (!Array.isArray(flowsReport.notes)) {
+    throw new Error(
+      "Invalid PR scan report: affectedFlows.notes must be an array.",
+    );
+  }
+  if (flowsReport.notes.length > MAX_AFFECTED_FLOWS_NOTES) {
+    throw new Error(
+      "Invalid PR scan report: affectedFlows.notes array exceeds size limit.",
+    );
+  }
+  for (const entry of flowsReport.notes) {
+    if (typeof entry !== "string" || entry.length > MAX_STRING_LENGTH) {
+      throw new Error(
+        "Invalid PR scan report: each affectedFlows.notes entry must be a string within length limits.",
+      );
+    }
+  }
+}
+
+function validateAffectedFlowEntry(entry: unknown): void {
+  if (typeof entry !== "object" || entry === null || Array.isArray(entry)) {
+    throw new Error(
+      "Invalid PR scan report: each affectedFlows.flows entry must be an object.",
+    );
+  }
+  const obj = entry as Record<string, unknown>;
+  assertBoundedStringField(obj, "method", "affectedFlows.flows[].method");
+  assertBoundedStringField(
+    obj,
+    "pathPattern",
+    "affectedFlows.flows[].pathPattern",
+  );
+  assertBoundedStringField(obj, "framework", "affectedFlows.flows[].framework");
+
+  if (
+    typeof obj.matchKind !== "string" ||
+    !AFFECTED_FLOW_MATCH_KINDS.has(obj.matchKind)
+  ) {
+    throw new Error(
+      "Invalid PR scan report: affectedFlows.flows[].matchKind must be handler_symbol, handler_impl_file, route_file, blast_symbol, or blast_file.",
+    );
+  }
+
+  if (obj.handlerSymbolName !== undefined) {
+    assertBoundedStringField(
+      obj,
+      "handlerSymbolName",
+      "affectedFlows.flows[].handlerSymbolName",
+    );
+  }
+  if (obj.handlerFile !== undefined) {
+    assertBoundedStringField(
+      obj,
+      "handlerFile",
+      "affectedFlows.flows[].handlerFile",
+    );
+  }
+  if (obj.routeConfidence !== undefined) {
+    if (
+      typeof obj.routeConfidence !== "number" ||
+      !Number.isFinite(obj.routeConfidence)
+    ) {
+      throw new Error(
+        "Invalid PR scan report: affectedFlows.flows[].routeConfidence must be a finite number when present.",
+      );
+    }
+  }
+  if (obj.confidenceClass !== undefined) {
+    // Contract: confidenceClass is blast-mediated only (blast_symbol / blast_file).
+    // Engine producer omits on direct kinds; reject when present on non-blast kinds.
+    if (
+      obj.matchKind !== "blast_symbol" &&
+      obj.matchKind !== "blast_file"
+    ) {
+      throw new Error(
+        "Invalid PR scan report: affectedFlows.flows[].confidenceClass is only allowed when matchKind is blast_symbol or blast_file.",
+      );
+    }
+    if (
+      typeof obj.confidenceClass !== "string" ||
+      !AFFECTED_FLOW_CONFIDENCE_CLASSES.has(obj.confidenceClass)
+    ) {
+      throw new Error(
+        "Invalid PR scan report: affectedFlows.flows[].confidenceClass must be SCIP_BOUND, RESOLVED, AMBIGUOUS, UNRESOLVED, CAPPED, or UNKNOWN when present.",
+      );
+    }
+  }
+  if (obj.evidence !== undefined) {
+    assertBoundedStringField(
+      obj,
+      "evidence",
+      "affectedFlows.flows[].evidence",
+    );
+  }
+}
+
 /** Required non-negative finite integer field (always present on the object). */
 function assertNonNegativeIntegerField(
   obj: Record<string, unknown>,
   field: string,
+  labelPrefix: string,
 ): void {
   const value = obj[field];
   if (
@@ -437,7 +680,7 @@ function assertNonNegativeIntegerField(
     value < 0
   ) {
     throw new Error(
-      `Invalid PR scan report: testGaps.${field} must be a non-negative integer.`,
+      `Invalid PR scan report: ${labelPrefix}.${field} must be a non-negative integer.`,
     );
   }
 }

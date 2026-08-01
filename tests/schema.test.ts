@@ -7,10 +7,12 @@ import {
   optionalString,
   validateReport,
   validateTestGaps,
+  validateAffectedFlows,
   type PrScanReport,
 } from "../src/schema.js";
 import sample from "./fixtures/pr-scan-report.sample.json";
 import liveCi from "./fixtures/live/pr-scan-report.ci.json";
+import affectedFlowsAvailable from "./fixtures/affected-flows-available.json";
 
 const sampleReport = sample as unknown as PrScanReport;
 const SCHEMA_VERSION_ERROR =
@@ -65,6 +67,33 @@ function validTestGaps(
     notes: [
       "Structural test_mapping only (IMPORT/NAMING_CONVENTION); not line coverage",
       "LCOV COVERAGE mapping kind does not currently persist (DDL NOT NULL on test_symbol_id)",
+    ],
+    ...overrides,
+  };
+}
+
+/** Minimal valid affectedFlows payload (available, one flow). */
+function validAffectedFlows(
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    status: "available",
+    flowCount: 1,
+    flowCapped: false,
+    flowTotal: 1,
+    flows: [
+      {
+        method: "GET",
+        pathPattern: "/api/items",
+        handlerSymbolName: "list_items",
+        handlerFile: "src/handlers/items.rs",
+        framework: "Axum",
+        matchKind: "handler_symbol",
+        routeConfidence: 1.0,
+      },
+    ],
+    notes: [
+      "Registered HTTP routes only (api_routes); not distributed traces or CRG-style call-chain flows.",
     ],
     ...overrides,
   };
@@ -471,6 +500,76 @@ describe("validateReport", () => {
       );
     }).toThrow(/testGaps\.status/);
   });
+
+  it("accepts reports with absent affectedFlows (old engine)", () => {
+    expect(() => {
+      validateReport(validReport());
+    }).not.toThrow();
+    const report = validReport() as Record<string, unknown>;
+    expect(report.affectedFlows).toBeUndefined();
+  });
+
+  it("accepts reports with a valid affectedFlows payload", () => {
+    expect(() => {
+      validateReport(
+        validReport({ schemaVersion: 2, affectedFlows: validAffectedFlows() }),
+      );
+    }).not.toThrow();
+  });
+
+  it("accepts fixtures/affected-flows-available.json via validateReport", () => {
+    expect(() => {
+      validateReport(affectedFlowsAvailable);
+    }).not.toThrow();
+    const report = affectedFlowsAvailable as unknown as PrScanReport;
+    expect(report.schemaVersion).toBe(2);
+    expect(report.affectedFlows?.status).toBe("available");
+    expect(report.affectedFlows?.flowCount).toBe(2);
+    expect(report.affectedFlows?.flows).toHaveLength(2);
+    // Nested validator also accepts the fixture block alone.
+    expect(() => {
+      validateAffectedFlows(
+        (affectedFlowsAvailable as { affectedFlows: unknown }).affectedFlows,
+      );
+    }).not.toThrow();
+  });
+
+  it("accepts schemaVersion 1|2 with affectedFlows (no v3 bump)", () => {
+    expect(() => {
+      validateReport(
+        validReport({ schemaVersion: 1, affectedFlows: validAffectedFlows() }),
+      );
+    }).not.toThrow();
+    expect(() => {
+      validateReport(
+        validReport({ schemaVersion: 2, affectedFlows: validAffectedFlows() }),
+      );
+    }).not.toThrow();
+  });
+
+  it("rejects hostile/huge affectedFlows via validateReport", () => {
+    expect(() => {
+      validateReport(
+        validReport({
+          affectedFlows: validAffectedFlows({
+            flows: Array.from({ length: 51 }, (_, i) => ({
+              method: "GET",
+              pathPattern: `/p${String(i)}`,
+              framework: "Axum",
+              matchKind: "route_file",
+            })),
+          }),
+        }),
+      );
+    }).toThrow(/affectedFlows\.flows array exceeds/);
+    expect(() => {
+      validateReport(
+        validReport({
+          affectedFlows: validAffectedFlows({ status: "empty" }),
+        }),
+      );
+    }).toThrow(/affectedFlows\.status/);
+  });
 });
 
 describe("validateTestGaps", () => {
@@ -667,6 +766,262 @@ describe("validateTestGaps", () => {
               symbol: attacker,
               file: "a.rs",
               mappingKind: "evil",
+            },
+          ],
+        }),
+      );
+      expect.unreachable("should have thrown");
+    } catch (err) {
+      expect(String(err)).not.toContain(attacker);
+    }
+  });
+});
+
+describe("validateAffectedFlows", () => {
+  it("accepts a full available payload", () => {
+    expect(() => {
+      validateAffectedFlows(validAffectedFlows());
+    }).not.toThrow();
+  });
+
+  it("accepts each known status with empty flows", () => {
+    for (const status of [
+      "available",
+      "empty_map",
+      "missing_table",
+      "no_change_seeds",
+      "unavailable",
+    ] as const) {
+      expect(() => {
+        validateAffectedFlows(
+          validAffectedFlows({
+            status,
+            flowCount: 0,
+            flowTotal: 0,
+            flowCapped: false,
+            flows: [],
+          }),
+        );
+      }).not.toThrow();
+    }
+  });
+
+  it("accepts all matchKind values and optional blast fields", () => {
+    for (const matchKind of [
+      "handler_symbol",
+      "handler_impl_file",
+      "route_file",
+      "blast_symbol",
+      "blast_file",
+    ] as const) {
+      expect(() => {
+        validateAffectedFlows(
+          validAffectedFlows({
+            flows: [
+              {
+                method: "POST",
+                pathPattern: "/x",
+                framework: "Axum",
+                matchKind,
+                ...(matchKind.startsWith("blast")
+                  ? {
+                      confidenceClass: "RESOLVED",
+                      evidence: "blast edge",
+                    }
+                  : {}),
+              },
+            ],
+          }),
+        );
+      }).not.toThrow();
+    }
+  });
+
+  it("rejects non-object and wrong types with neutral errors", () => {
+    expect(() => {
+      validateAffectedFlows(null);
+    }).toThrow(/affectedFlows must be an object/);
+    expect(() => {
+      validateAffectedFlows([]);
+    }).toThrow(/affectedFlows must be an object/);
+    expect(() => {
+      validateAffectedFlows("nope");
+    }).toThrow(/affectedFlows must be an object/);
+    expect(() => {
+      validateAffectedFlows(validAffectedFlows({ status: 1 }));
+    }).toThrow(/affectedFlows\.status/);
+    expect(() => {
+      validateAffectedFlows(validAffectedFlows({ flowCapped: "yes" }));
+    }).toThrow(/flowCapped/);
+    expect(() => {
+      validateAffectedFlows(validAffectedFlows({ flowCount: -1 }));
+    }).toThrow(/flowCount/);
+    expect(() => {
+      validateAffectedFlows(validAffectedFlows({ flowTotal: 1.5 }));
+    }).toThrow(/flowTotal/);
+    expect(() => {
+      validateAffectedFlows(
+        validAffectedFlows({ flowTotal: Number.POSITIVE_INFINITY }),
+      );
+    }).toThrow(/flowTotal/);
+  });
+
+  it("rejects bare empty status and unknown statuses", () => {
+    expect(() => {
+      validateAffectedFlows(validAffectedFlows({ status: "empty" }));
+    }).toThrow(/affectedFlows\.status/);
+    expect(() => {
+      validateAffectedFlows(validAffectedFlows({ status: "empty_mapping" }));
+    }).toThrow(/affectedFlows\.status/);
+    expect(() => {
+      validateAffectedFlows(validAffectedFlows({ status: "ok" }));
+    }).toThrow(/affectedFlows\.status/);
+  });
+
+  it("rejects wrong matchKind and confidenceClass", () => {
+    expect(() => {
+      validateAffectedFlows(
+        validAffectedFlows({
+          flows: [
+            {
+              method: "GET",
+              pathPattern: "/a",
+              framework: "Axum",
+              matchKind: "symbol",
+            },
+          ],
+        }),
+      );
+    }).toThrow(/matchKind/);
+    expect(() => {
+      validateAffectedFlows(
+        validAffectedFlows({
+          flows: [
+            {
+              method: "GET",
+              pathPattern: "/a",
+              framework: "Axum",
+              matchKind: "blast_symbol",
+              confidenceClass: "high",
+            },
+          ],
+        }),
+      );
+    }).toThrow(/confidenceClass/);
+    // confidenceClass is blast-mediated only (0118 contract)
+    expect(() => {
+      validateAffectedFlows(
+        validAffectedFlows({
+          flows: [
+            {
+              method: "GET",
+              pathPattern: "/a",
+              framework: "Axum",
+              matchKind: "route_file",
+              confidenceClass: "RESOLVED",
+            },
+          ],
+        }),
+      );
+    }).toThrow(/confidenceClass is only allowed when matchKind is blast/);
+  });
+
+  it("rejects missing arrays and wrong entry shapes", () => {
+    expect(() => {
+      validateAffectedFlows(validAffectedFlows({ flows: "nope" }));
+    }).toThrow(/affectedFlows\.flows must be an array/);
+    expect(() => {
+      validateAffectedFlows(validAffectedFlows({ notes: {} }));
+    }).toThrow(/affectedFlows\.notes must be an array/);
+    expect(() => {
+      validateAffectedFlows(validAffectedFlows({ flows: [null] }));
+    }).toThrow(/flows entry must be an object/);
+    expect(() => {
+      validateAffectedFlows(
+        validAffectedFlows({
+          flows: [
+            {
+              method: "",
+              pathPattern: "/a",
+              framework: "Axum",
+              matchKind: "route_file",
+            },
+          ],
+        }),
+      );
+    }).toThrow(/flows\[\]\.method/);
+    expect(() => {
+      validateAffectedFlows(
+        validAffectedFlows({
+          flows: [
+            {
+              method: "GET",
+              pathPattern: "/a",
+              framework: "Axum",
+              matchKind: "route_file",
+              routeConfidence: Number.NaN,
+            },
+          ],
+        }),
+      );
+    }).toThrow(/routeConfidence/);
+  });
+
+  it("rejects oversized flows, notes, and strings", () => {
+    expect(() => {
+      validateAffectedFlows(
+        validAffectedFlows({
+          flows: Array.from({ length: 51 }, (_, i) => ({
+            method: "GET",
+            pathPattern: `/p${String(i)}`,
+            framework: "Axum",
+            matchKind: "route_file",
+          })),
+        }),
+      );
+    }).toThrow(/flows array exceeds/);
+    expect(() => {
+      validateAffectedFlows(
+        validAffectedFlows({
+          notes: Array.from({ length: 51 }, () => "n"),
+        }),
+      );
+    }).toThrow(/notes array exceeds/);
+    const huge = "x".repeat(4097);
+    expect(() => {
+      validateAffectedFlows(
+        validAffectedFlows({
+          flows: [
+            {
+              method: huge,
+              pathPattern: "/a",
+              framework: "Axum",
+              matchKind: "route_file",
+            },
+          ],
+        }),
+      );
+    }).toThrow(/flows\[\]\.method/);
+  });
+
+  it("never echoes hostile payload content into validation errors", () => {
+    const attacker = "attacker-payload-must-not-leak";
+    try {
+      validateAffectedFlows(validAffectedFlows({ status: attacker }));
+      expect.unreachable("should have thrown");
+    } catch (err) {
+      expect(String(err)).not.toContain(attacker);
+      expect(String(err)).toMatch(/affectedFlows\.status/);
+    }
+    try {
+      validateAffectedFlows(
+        validAffectedFlows({
+          flows: [
+            {
+              method: attacker,
+              pathPattern: "/a",
+              framework: "Axum",
+              matchKind: "evil_kind",
             },
           ],
         }),

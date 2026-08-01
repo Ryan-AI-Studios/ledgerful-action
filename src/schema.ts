@@ -638,6 +638,16 @@ function validateAffectedFlowEntry(entry: unknown): void {
     }
   }
   if (obj.confidenceClass !== undefined) {
+    // Contract: confidenceClass is blast-mediated only (blast_symbol / blast_file).
+    // Engine producer omits on direct kinds; reject when present on non-blast kinds.
+    if (
+      obj.matchKind !== "blast_symbol" &&
+      obj.matchKind !== "blast_file"
+    ) {
+      throw new Error(
+        "Invalid PR scan report: affectedFlows.flows[].confidenceClass is only allowed when matchKind is blast_symbol or blast_file.",
+      );
+    }
     if (
       typeof obj.confidenceClass !== "string" ||
       !AFFECTED_FLOW_CONFIDENCE_CLASSES.has(obj.confidenceClass)

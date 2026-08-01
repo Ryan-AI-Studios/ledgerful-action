@@ -908,6 +908,22 @@ describe("validateAffectedFlows", () => {
         }),
       );
     }).toThrow(/confidenceClass/);
+    // confidenceClass is blast-mediated only (0118 contract)
+    expect(() => {
+      validateAffectedFlows(
+        validAffectedFlows({
+          flows: [
+            {
+              method: "GET",
+              pathPattern: "/a",
+              framework: "Axum",
+              matchKind: "route_file",
+              confidenceClass: "RESOLVED",
+            },
+          ],
+        }),
+      );
+    }).toThrow(/confidenceClass is only allowed when matchKind is blast/);
   });
 
   it("rejects missing arrays and wrong entry shapes", () => {

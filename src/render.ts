@@ -260,8 +260,7 @@ function formatAffectedFlowEntry(entry: AffectedFlowEntry): string {
 function sortAffectedFlows(flows: AffectedFlowEntry[]): AffectedFlowEntry[] {
   return [...flows].sort((a, b) => {
     const byKind =
-      (MATCH_KIND_PRIORITY[a.matchKind] ?? 99) -
-      (MATCH_KIND_PRIORITY[b.matchKind] ?? 99);
+      MATCH_KIND_PRIORITY[a.matchKind] - MATCH_KIND_PRIORITY[b.matchKind];
     if (byKind !== 0) return byKind;
     const byMethod = a.method.localeCompare(b.method);
     if (byMethod !== 0) return byMethod;

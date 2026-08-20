@@ -57,7 +57,7 @@ jobs:
       - name: Run Ledgerful PR risk scan
         # No mutable release tag yet — pin the full commit SHA from
         # https://github.com/Ryan-AI-Studios/ledgerful-action (main).
-        uses: Ryan-AI-Studios/ledgerful-action@f900ead4d7a3d6d9162b393094492b5d5fe10578
+        uses: Ryan-AI-Studios/ledgerful-action@bacf400797142884c46e97c6ce755b7ef7433a53
         with:
           ledgerful-version: v0.2.10
           # checksum for ledgerful-x86_64-unknown-linux-gnu.tar.gz (v0.2.10); substitute for other OS/arch
@@ -107,7 +107,7 @@ jobs:
       - name: Post risk summary
         # No mutable release tag yet — pin the full commit SHA from
         # https://github.com/Ryan-AI-Studios/ledgerful-action (main).
-        uses: Ryan-AI-Studios/ledgerful-action@f900ead4d7a3d6d9162b393094492b5d5fe10578
+        uses: Ryan-AI-Studios/ledgerful-action@bacf400797142884c46e97c6ce755b7ef7433a53
         with:
           github-token: ${{ github.token }}
           report-path: ledgerful-pr-report.json

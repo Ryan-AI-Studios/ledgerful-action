@@ -7,9 +7,12 @@
 - **Default engine pin v0.2.11 (0218):** `action.yml` default `ledgerful-version`,
   README Workflow A sample, `workflows/ledgerful-pr-scan.yml`, and CI smoke-scan
   pin published **v0.2.11** with Linux gnu sidecar checksum
-  `5c26c34db4cc50f51a6ff0cf129ad5c175c35716941f7c6354b47f3d7aa12e1a`. Six
-  `uses:` SHA sites stay on `bacf4007…` until a follow-on SHA bump PR after
-  this merges (0198 order).
+  `5c26c34db4cc50f51a6ff0cf129ad5c175c35716941f7c6354b47f3d7aa12e1a`.
+- **Action `uses:` SHA → `#13` merge (0218 / 0198-B):** README×2 +
+  `workflows/ledgerful-pr-scan.yml` + `workflows/ledgerful-pr-report.yml` pin
+  `Ryan-AI-Studios/ledgerful-action@2142ced7092a9b3e41cb842255272df979ed4b87`
+  (PR #13 squash). No version/checksum churn; Workflow B remains report-only.
+  No `src/` / `dist/`.
 
 ### Added
 

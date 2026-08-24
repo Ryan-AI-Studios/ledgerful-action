@@ -36,7 +36,7 @@ jobs:
         id: ledgerful-scan
         # No mutable release tag yet — pin the full commit SHA from
         # https://github.com/Ryan-AI-Studios/ledgerful-action (main).
-        uses: Ryan-AI-Studios/ledgerful-action@bacf400797142884c46e97c6ce755b7ef7433a53
+        uses: Ryan-AI-Studios/ledgerful-action@2142ced7092a9b3e41cb842255272df979ed4b87
         with:
           ledgerful-version: v0.2.11
           ledgerful-checksum: 5c26c34db4cc50f51a6ff0cf129ad5c175c35716941f7c6354b47f3d7aa12e1a

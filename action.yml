@@ -7,9 +7,9 @@ branding:
 
 inputs:
   ledgerful-version:
-    description: Pinned Ledgerful engine release version to run (e.g. v0.2.10). Not `latest` — supply-chain hygiene.
+    description: Pinned Ledgerful engine release version to run (e.g. v0.2.11). Not `latest` — supply-chain hygiene.
     required: false
-    default: 'v0.2.10'
+    default: 'v0.2.11'
   ledgerful-checksum:
     description: SHA-256 checksum of the pinned release ARCHIVE (.tar.gz/.zip) for the runner's OS/arch. Verified against the downloaded archive before extraction. Required in Workflow A (scan); not used in Workflow B. Validated at runtime in Workflow A.
     required: false

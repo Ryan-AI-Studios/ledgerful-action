@@ -26,7 +26,7 @@ jobs:
       - run: npm test
 
   # Smoke-scan: end-to-end test that the Action downloads, verifies, and runs the real
-  # engine binary against this PR's diff. Pins published Latest v0.2.10 + Linux gnu
+  # engine binary against this PR's diff. Pins published Latest v0.2.11 + Linux gnu
   # sidecar first field; scan --pr exists on this engine. Blocking. Checksum is the
   # sidecar first field directly — no vars fallback (unknown vars value is a drift trap).
   smoke-scan:
@@ -46,7 +46,7 @@ jobs:
       - name: Run Ledgerful PR scan (smoke)
         uses: ./
         with:
-          ledgerful-version: v0.2.10
-          ledgerful-checksum: 817debe3fa56db93aeb1273b1648a2b6370a50f3c69150caf8cdc423d9c1930d
+          ledgerful-version: v0.2.11
+          ledgerful-checksum: 5c26c34db4cc50f51a6ff0cf129ad5c175c35716941f7c6354b47f3d7aa12e1a
         env:
           LEDGERFUL_NO_NETWORK: "1"

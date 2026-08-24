@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **Default engine pin v0.2.11 (0218):** `action.yml` default `ledgerful-version`,
+  README Workflow A sample, `workflows/ledgerful-pr-scan.yml`, and CI smoke-scan
+  pin published **v0.2.11** with Linux gnu sidecar checksum
+  `5c26c34db4cc50f51a6ff0cf129ad5c175c35716941f7c6354b47f3d7aa12e1a`. Six
+  `uses:` SHA sites stay on `bacf4007…` until a follow-on SHA bump PR after
+  this merges (0198 order).
+
 ### Added
 
 - **Affected flows sticky section (track 0118):** optional `affectedFlows` on PR scan schema v1|v2

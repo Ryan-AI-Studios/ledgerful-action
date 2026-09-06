@@ -4,6 +4,11 @@
 
 ### Changed
 
+- **Default engine pin v0.2.12:** `action.yml` default `ledgerful-version`,
+  README Workflow A sample, `workflows/ledgerful-pr-scan.yml`, and CI smoke-scan
+  pin published **v0.2.12** with Linux gnu sidecar checksum
+  `843d91a399570e2d7e4335e573c6a2e019dfbf727a5f01385f4613e48d93a9d4`.
+
 - **Default engine pin v0.2.11 (0218):** `action.yml` default `ledgerful-version`,
   README Workflow A sample, `workflows/ledgerful-pr-scan.yml`, and CI smoke-scan
   pin published **v0.2.11** with Linux gnu sidecar checksum

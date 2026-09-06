@@ -8,9 +8,9 @@
 # IMPORTANT: actions/checkout MUST use fetch-depth: 0 (default 1 omits the base commit,
 # so `ledgerful scan --pr <base>...<head>` can't compute the diff).
 #
-# The checksum below is for ledgerful-x86_64-unknown-linux-gnu.tar.gz from v0.2.11
+# The checksum below is for ledgerful-x86_64-unknown-linux-gnu.tar.gz from v0.2.12
 # (published .sha256 sidecar). For other runners, substitute the matching checksum:
-# https://github.com/Ryan-AI-Studios/Ledgerful/releases/tag/v0.2.11
+# https://github.com/Ryan-AI-Studios/Ledgerful/releases/tag/v0.2.12
 
 name: Ledgerful PR Scan
 
@@ -38,8 +38,8 @@ jobs:
         # https://github.com/Ryan-AI-Studios/ledgerful-action (main).
         uses: Ryan-AI-Studios/ledgerful-action@2142ced7092a9b3e41cb842255272df979ed4b87
         with:
-          ledgerful-version: v0.2.11
-          ledgerful-checksum: 5c26c34db4cc50f51a6ff0cf129ad5c175c35716941f7c6354b47f3d7aa12e1a
+          ledgerful-version: v0.2.12
+          ledgerful-checksum: 843d91a399570e2d7e4335e573c6a2e019dfbf727a5f01385f4613e48d93a9d4
         env:
           LEDGERFUL_NO_NETWORK: "1"
 

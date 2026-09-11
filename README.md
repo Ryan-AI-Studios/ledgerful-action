@@ -128,7 +128,7 @@ jobs:
 | `ledgerful-version` | no | `v0.2.12` | pinned engine release version |
 | `ledgerful-checksum` | yes | — | SHA-256 of the release archive (.tar.gz/.zip) for the runner OS/arch; required in Workflow A |
 | `github-token` | no | `${{ github.token }}` | token used to authenticate the release download in Workflow A and to post the comment / check-run in Workflow B |
-| `fail-on` | no | — | optional `low`/`medium`/`high` threshold that fails the build non-blockingly |
+| `fail-on` | no | — | optional `low`/`medium`/`high` threshold that fails the **job** when set; check-run stays `success`/`neutral` from `riskLevel` (high is neutral) |
 
 ## Action outputs
 
@@ -239,8 +239,8 @@ diff + pinned engine version.
 
 - A hosted service / GitHub App (that's the hosted tier). Posting to non-GitHub forges (GitLab/Gitea
   later). Policy *enforcement* / fail-the-build gating (that's a separate policy engine — this
-  Action *reports*; it may expose a non-blocking `--fail-on` behind a flag but the policy engine is
-  out of scope here). Any engine network code.
+  Action *reports*; optional `fail-on` can fail the Action **job** only, never the check-run
+  conclusion). Any engine network code.
 
 ## License
 

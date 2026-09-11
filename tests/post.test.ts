@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import sample from "./fixtures/pr-scan-report.sample.json";
-import { postSummary } from "../src/post.js";
+import { postSummary, riskLevelConclusion } from "../src/post.js";
 import type { PrScanReport } from "../src/schema.js";
 
 const sampleReport = sample as unknown as PrScanReport;
@@ -71,6 +71,24 @@ beforeEach(() => {
   };
 });
 
+describe("riskLevelConclusion", () => {
+  it("risk_level_conclusion_high_is_neutral", () => {
+    expect(riskLevelConclusion("high")).toBe("neutral");
+  });
+
+  it("risk_level_conclusion_medium_is_neutral", () => {
+    expect(riskLevelConclusion("medium")).toBe("neutral");
+  });
+
+  it("risk_level_conclusion_low_is_success", () => {
+    expect(riskLevelConclusion("low")).toBe("success");
+  });
+
+  it("risk_level_conclusion_unknown_is_neutral", () => {
+    expect(riskLevelConclusion("critical")).toBe("neutral");
+  });
+});
+
 describe("postSummary", () => {
   it("creates a new comment when none exists", async () => {
     const octokit = createOctokit([], []) as unknown as ReturnType<typeof github.getOctokit>;
@@ -87,6 +105,24 @@ describe("postSummary", () => {
     expect(octokit.rest.issues.createComment).toHaveBeenCalled();
     expect(octokit.rest.issues.updateComment).not.toHaveBeenCalled();
     expect(octokit.rest.checks.create).toHaveBeenCalled();
+  });
+
+  it("post_high_report_creates_neutral_check", async () => {
+    const octokit = createOctokit([], []) as unknown as ReturnType<typeof github.getOctokit>;
+    vi.mocked(github.getOctokit).mockReturnValue(octokit);
+    const highReport = { ...sampleReport, riskLevel: "high" as const };
+
+    await postSummary({
+      token: "token",
+      report: highReport,
+      reportPath: "ledgerful-pr-report.json",
+      artifactUrl: "https://example.com/artifact",
+      checkRunName: "Ledgerful PR Risk Report",
+    });
+
+    expect(octokit.rest.checks.create).toHaveBeenCalledWith(
+      expect.objectContaining({ conclusion: "neutral" }),
+    );
   });
 
   it("updates an existing comment", async () => {
@@ -122,6 +158,24 @@ describe("postSummary", () => {
 
     expect(octokit.rest.checks.update).toHaveBeenCalledWith(
       expect.objectContaining({ check_run_id: 55 }),
+    );
+    expect(octokit.rest.checks.create).not.toHaveBeenCalled();
+  });
+
+  it("post_high_report_updates_neutral_check", async () => {
+    const octokit = createOctokit([], [{ id: 55 }]) as unknown as ReturnType<typeof github.getOctokit>;
+    vi.mocked(github.getOctokit).mockReturnValue(octokit);
+    const highReport = { ...sampleReport, riskLevel: "high" as const };
+
+    await postSummary({
+      token: "token",
+      report: highReport,
+      reportPath: "ledgerful-pr-report.json",
+      checkRunName: "Ledgerful PR Risk Report",
+    });
+
+    expect(octokit.rest.checks.update).toHaveBeenCalledWith(
+      expect.objectContaining({ check_run_id: 55, conclusion: "neutral" }),
     );
     expect(octokit.rest.checks.create).not.toHaveBeenCalled();
   });

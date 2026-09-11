@@ -435,6 +435,17 @@ describe("resolvePrRange", () => {
     delete process.env.GITHUB_HEAD_REF;
   });
 
+  it("should_fail_empty_fail_on_is_false", () => {
+    expect(runModule.shouldFail("high", "")).toBe(false);
+    expect(runModule.shouldFail("high", "   ")).toBe(false);
+  });
+
+  it("should_fail_high_threshold_still_true", () => {
+    expect(runModule.shouldFail("high", "high")).toBe(true);
+    expect(runModule.shouldFail("medium", "high")).toBe(false);
+    expect(runModule.shouldFail("low", "low")).toBe(true);
+  });
+
   it("treats empty GITHUB_BASE_REF as missing (not empty string range)", () => {
     delete process.env.GITHUB_EVENT_PATH;
     process.env.GITHUB_BASE_REF = "";

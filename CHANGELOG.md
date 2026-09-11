@@ -4,6 +4,11 @@
 
 ### Changed
 
+- **Advisory high check-run (0334):** `riskLevel: high` posts check-run
+  `conclusion: neutral` (same as medium). Title/summary still say high.
+  Only an explicit `fail-on` fails the Action job. Unknown levels are
+  `neutral`, not silent `success`.
+
 - **Default engine pin v0.2.12:** `action.yml` default `ledgerful-version`,
   README Workflow A sample, `workflows/ledgerful-pr-scan.yml`, and CI smoke-scan
   pin published **v0.2.12** with Linux gnu sidecar checksum

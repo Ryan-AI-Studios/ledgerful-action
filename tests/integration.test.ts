@@ -90,7 +90,7 @@ describe("Workflow B integration", () => {
     expect(checkRunCall.output.text).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
     expect(checkRunCall.output.text).not.toContain("</details>\n\n```json");
     expect(checkRunCall.head_sha).toBe("head-sha-abc");
-    expect(checkRunCall.conclusion).toBe("failure");
+    expect(checkRunCall.conclusion).toBe("neutral");
 
     fs.rmSync(dir, { recursive: true, force: true });
   });

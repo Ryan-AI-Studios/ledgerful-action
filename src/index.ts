@@ -143,7 +143,7 @@ async function runWorkflowA(): Promise<void> {
   }
 }
 
-function shouldFail(riskLevel: string, failOn: string): boolean {
+export function shouldFail(riskLevel: string, failOn: string): boolean {
   const levels = ["low", "medium", "high"];
   const riskIndex = levels.indexOf(riskLevel);
   const failIndex = levels.indexOf(failOn);

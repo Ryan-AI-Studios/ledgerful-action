@@ -225,17 +225,16 @@ async function upsertComment(
   }
 }
 
-function riskLevelConclusion(
+export function riskLevelConclusion(
   riskLevel: string,
-): "success" | "failure" | "neutral" {
+): "success" | "neutral" {
   switch (riskLevel) {
-    case "high":
-      return "failure";
-    case "medium":
-      return "neutral";
     case "low":
-    default:
       return "success";
+    case "high":
+    case "medium":
+    default:
+      return "neutral";
   }
 }
 

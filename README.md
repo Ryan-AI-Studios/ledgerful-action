@@ -187,7 +187,7 @@ This Action accepts **`schemaVersion` 1 or 2** (mixed Workflow A/B rollouts duri
   "headRef": "HEAD",
   "headHash": "abc...",
   "branchName": "feature/x",
-  "treeClean": true,
+  "treeClean": false,
   "changeCount": 3,
   "changes": [{ "path": "src/foo.rs", "changeType": "modified" }],
   "riskLevel": "low",
@@ -196,6 +196,7 @@ This Action accepts **`schemaVersion` 1 or 2** (mixed Workflow A/B rollouts duri
 }
 ```
 
+- **`treeClean`:** whether the selected `baseRef`…`headRef` diff is empty (`changeCount == 0`). It is **not** working-tree dirtiness. A nonempty PR therefore has `treeClean: false`.
 - **`headHash` / `branchName`:** optional. On detached HEAD (typical `pull_request` checkout) the engine
   may omit them or historically emit `null`; the Action accepts string, `null`, or absent and never
   prints the word `null` into comments.
